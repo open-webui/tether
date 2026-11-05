@@ -207,7 +207,7 @@ export class Sessions {
     }
   }
 
-  async signInWithBrowser(id: string, provider: string): Promise<void> {
+  async signInWithBrowser(id: string, provider: string): Promise<boolean> {
     if (this.browsers.has(id)) throw new Error('Browser sign-in is already open.')
     const version = this.versions.get(id) ?? 0
     const connection = this.connection(id)
@@ -216,12 +216,9 @@ export class Sessions {
       oauth?: { providers?: Record<string, unknown> }
     }>(id, 'api/config')
     this.unchanged(id, version)
-    if (
-      !config.features?.auth_sessions ||
-      !Object.hasOwn(config.oauth?.providers ?? {}, provider)
-    ) {
-      throw new Error('This WebUI does not support browser sign-in from Tether.')
-    }
+    if (!Object.hasOwn(config.oauth?.providers ?? {}, provider))
+      throw new Error('This WebUI does not support this sign-in provider.')
+    if (!config.features?.auth_sessions) return false
     const verifier = randomBytes(32).toString('base64url')
     const state = randomBytes(32).toString('base64url')
     const path = '/callback/' + randomBytes(24).toString('base64url')
@@ -311,6 +308,7 @@ export class Sessions {
       if (existing && existing.userId !== info.id)
         throw new Error('Sign out before changing accounts.')
       await this.accept(id, result, info.id, version)
+      return true
     } finally {
       clearTimeout(timer)
       this.browsers.delete(id)

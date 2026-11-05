@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { TetherBridge } from '../shared/connections'
+import { belongsToConnection, type TetherBridge } from '../shared/connections'
+import { installGeolocationTimeout } from './geolocation'
 
 let managed = false
 
@@ -44,7 +45,12 @@ const bridge: TetherBridge = {
   }
 }
 
-if (process.isMainFrame) {
+const connectionURL = process.argv
+  .find((argument) => argument.startsWith('--tether-connection-url='))
+  ?.slice('--tether-connection-url='.length)
+
+if (process.isMainFrame && connectionURL && belongsToConnection(location.href, connectionURL)) {
+  contextBridge.executeInMainWorld({ func: installGeolocationTimeout })
   contextBridge.exposeInMainWorld('tether', bridge)
   // Reuse WebUI's existing theme notification hook, including changes between equal palettes.
   let lastTheme = ''

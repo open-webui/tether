@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-11-06
+
+### Fixed
+
+- **Sign-in on older WebUI versions.** Clicking a sign-in provider or opening a WebUI that signs in automatically no longer stops just because the server lacks Tether's browser sign-in support. Tether continues sign-in inside the app and keeps the same login session through redirects and pop-up windows. Servers that support browser sign-in still open your default browser. Some providers, including Google, may still refuse sign-in inside desktop apps.
+- **Location lookups that stall message sending.** When location sharing is enabled in WebUI, Tether now stops waiting for a location after at most 10 seconds, including time spent waiting for permission. WebUI can then continue sending without a location. This timeout applies on Mac, Windows, and Linux; getting a location still depends on your system's location services.
+- **Mac permission prompts.** Added the description macOS needs when Tether requests your location. Corrected how the app includes its camera, microphone, Documents, and Downloads permission descriptions so macOS can read them too.
+- **Access from sign-in pages and embedded content.** Location access is now limited to the saved WebUI page. Sign-in popups, embedded pages, and pages outside the saved WebUI address cannot use that permission. Tether's app controls are also kept off external sign-in pages.
+
 ## [0.1.2] - 2026-11-05
 
 ### Changed
