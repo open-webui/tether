@@ -4,7 +4,7 @@ import { randomBytes } from 'node:crypto'
 import { access, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import type { LocalServerConfig, RuntimeState } from '../shared/config'
 import type { ServiceStatus } from '../shared/terminal'
 import { Runtime } from './runtime'
@@ -49,9 +49,18 @@ export class OpenTerminal {
   }
 
   private environment(): NodeJS.ProcessEnv {
-    return Object.fromEntries(
+    const env = Object.fromEntries(
       Object.entries(this.runtime.environment()).filter(([key]) => !/^OPEN_TERMINAL_/i.test(key))
     )
+    // Finder launches do not inherit a shell's PATH; native agent CLIs still need their runtimes.
+    env.PATH = [
+      env.PATH ?? '',
+      join(homedir(), '.local', 'bin'),
+      join(homedir(), '.cursor', 'bin'),
+      join(homedir(), '.opencode', 'bin'),
+      ...(process.platform === 'darwin' ? ['/opt/homebrew/bin', '/usr/local/bin'] : [])
+    ].join(delimiter)
+    return env
   }
 
   destination(id: string, path: string, websocket: boolean): RelayDestination {

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-11-06
+
+### Fixed
+
+- **Broken WebUI addresses.** Adding or editing a connection now checks that the address is reachable and serves Open WebUI before saving it. Unreachable servers, broken redirects, and addresses pointing to another kind of website show an error. If a new address fails the check, your existing connection and sign-in are kept. Working local HTTP addresses are still supported.
+- **Unexpected browser windows when opening a connection.** If a WebUI address redirects elsewhere, such as from `http://` to `https://`, Tether now asks you to edit the connection to use the final address instead of unexpectedly opening your browser.
+- **Appearance resetting after restart.** Tether now keeps your saved light, dark, or automatic appearance when a connection opens. An older WebUI's previous appearance can no longer overwrite that choice during startup.
+- **Installed agents not found when opening Tether from Finder.** Open Terminal now also looks in common installation folders for agent tools such as Codex, Claude Code, Cursor, and OpenCode, plus Homebrew-installed tools on Mac. This fixes cases where an installed agent or a program it needs could be found from a terminal but not from Tether. Agent chats require compatible Open Terminal and WebUI versions, with the agent installed and signed in on your computer.
+
 ## [0.1.3] - 2026-11-06
 
 ### Fixed

@@ -14,8 +14,9 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
   belongsToConnection,
+  connectionRedirectError,
   endpoint,
-  normalizeURL,
+  validateConnectionURL,
   type AccessToken,
   type Connection,
   type ConnectionState
@@ -99,7 +100,6 @@ export class Connections {
       this.eventReady.has(id) &&
       belongsToConnection(view.webContents.getURL(), connection.url)
     ) {
-      this.pendingThemes.delete(id)
       view.webContents.send('tether:event', null, { type: 'theme:update', data: { theme } })
     }
   }
@@ -392,7 +392,7 @@ export class Connections {
         ) {
           throw new Error('Invalid connection')
         }
-        const url = normalizeURL(input.url.trim())
+        const url = await validateConnectionURL(input.url)
         const connection = { id: randomUUID(), name: input.name.trim() || new URL(url).host, url }
         this.store.connections.push(connection)
         await this.store.saveConfig()
@@ -419,7 +419,8 @@ export class Connections {
           input.name.length > 100
         )
           throw new Error('Invalid connection')
-        const url = normalizeURL(input.url.trim())
+        const url = await validateConnectionURL(input.url)
+        if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
         const previous = { ...connection }
         if (url !== connection.url) await this.clearConnection(id)
         connection.name = input.name.trim() || new URL(url).host
@@ -487,8 +488,10 @@ export class Connections {
         !['system', 'light', 'dark', 'oled-dark', 'her'].includes(value)
       )
         throw new Error('Invalid theme')
-      if (this.pendingThemes.has(id)) return
       const theme = value === 'system' ? 'system' : value.includes('dark') ? 'dark' : 'light'
+      const pending = this.pendingThemes.get(id)
+      if (pending && theme !== pending) return
+      this.pendingThemes.delete(id)
       this.themes.set(id, theme)
       if (id === this.store.selected && theme !== this.store.general.theme)
         await this.themeChanged(theme)
@@ -562,6 +565,8 @@ export class Connections {
       }
     })
     this.views.set(connection.id, view)
+    // Keep the saved appearance until WebUI confirms it, including on older servers.
+    this.pendingThemes.set(connection.id, this.store.general.theme)
     const canLocate = (
       requester: Electron.WebContents | null,
       details: { isMainFrame: boolean; requestingUrl?: string }
@@ -663,7 +668,8 @@ export class Connections {
       event: Electron.Event,
       address: string,
       _isInPlace?: boolean,
-      isMainFrame?: boolean
+      isMainFrame?: boolean,
+      isRedirect = false
     ): void => {
       if (isMainFrame === false) return
       if (belongsToConnection(address, connection.url)) {
@@ -676,10 +682,16 @@ export class Connections {
       }
       if (legacySignIn && /^https?:\/\//i.test(address)) return
       event.preventDefault()
+      if (isRedirect) {
+        this.fail(connection.id, connectionRedirectError)
+        return
+      }
       if (['https:', 'http:'].includes(new URL(address).protocol)) void shell.openExternal(address)
     }
-    view.webContents.on('will-navigate', navigate)
-    view.webContents.on('will-redirect', navigate)
+    view.webContents.on('will-navigate', (event, address) => navigate(event, address))
+    view.webContents.on('will-redirect', (event, address, isInPlace, isMainFrame) =>
+      navigate(event, address, isInPlace, isMainFrame, true)
+    )
     view.webContents.setWindowOpenHandler(({ url, disposition, features }) => {
       const provider = oauthProvider(url)
       if (provider && !legacySignIn) {
@@ -723,7 +735,9 @@ export class Connections {
     )
     void view.webContents
       .loadURL(path ? endpoint(connection.url, path) : connection.url)
-      .catch(() => this.fail(connection.id, 'Could not load WebUI.'))
+      .catch(() => {
+        if (!this.errors[connection.id]) this.fail(connection.id, 'Could not load WebUI.')
+      })
   }
 
   private layout(): void {

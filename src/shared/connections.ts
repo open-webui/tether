@@ -51,6 +51,59 @@ export function endpoint(url: string, path: string): string {
   return url.replace(/\/+$/, '') + '/' + path.replace(/^\/+/, '')
 }
 
+export const connectionRedirectError =
+  'WebUI redirects to a different address. Edit the connection to use its final address, including https:// if required.'
+
+export async function validateConnectionURL(value: string): Promise<string> {
+  const url = normalizeURL(value.trim())
+  const signal = AbortSignal.timeout(15000)
+  const request = async (address: string): Promise<Response> => {
+    try {
+      return await fetch(address, { redirect: 'manual', signal })
+    } catch {
+      throw new Error('Could not reach WebUI. Check the address, HTTP/HTTPS, and your network.')
+    }
+  }
+
+  // Check the page too: its redirects can differ from those of the API.
+  let address = url
+  for (let redirects = 0; ; redirects++) {
+    const response = await request(address)
+    await response.body?.cancel()
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location')
+      if (!location || redirects >= 5)
+        throw new Error('WebUI has a broken redirect. Check the address.')
+      address = new URL(location, address).href
+      if (!belongsToConnection(address, url)) throw new Error(connectionRedirectError)
+      continue
+    }
+    if (!response.ok)
+      throw new Error(`Could not load WebUI (HTTP ${response.status}). Check the address.`)
+    break
+  }
+
+  const response = await request(endpoint(url, 'api/config'))
+  if (!response.ok) {
+    await response.body?.cancel()
+    if (response.status >= 300 && response.status < 400) throw new Error(connectionRedirectError)
+    throw new Error(`Could not reach the WebUI API (HTTP ${response.status}). Check the address.`)
+  }
+  const config = await response.json().catch(() => null)
+  if (
+    config?.status !== true ||
+    typeof config?.name !== 'string' ||
+    !config?.features ||
+    typeof config.features !== 'object' ||
+    Array.isArray(config.features)
+  ) {
+    throw new Error(
+      'This address did not return a valid Open WebUI configuration. Check the WebUI address.'
+    )
+  }
+  return url
+}
+
 export function belongsToConnection(address: string, connectionURL: string): boolean {
   try {
     const actual = new URL(address)
