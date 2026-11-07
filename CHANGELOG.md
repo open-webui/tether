@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-11-07
+
+### Changed
+
+- **New app icon.** Replaced the solid Open WebUI mark with a dotted version on a light dot-grid background. Updated the app icons for Mac, Windows, and Linux.
+
+### Fixed
+
+- **Mac menu-bar icon.** Tether now uses a simple monochrome symbol that adapts to light and dark menu bars, instead of shrinking the full app icon. Included a sharper version for Retina displays.
+- **Connection name label.** Added a small gap between **Name** and **optional** when adding or editing a connection, so the two labels no longer run together.
+
 ## [0.1.4] - 2026-11-06
 
 ### Fixed

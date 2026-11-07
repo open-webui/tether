@@ -795,6 +795,7 @@
     margin-bottom: 6px;
   }
   .optional {
+    margin-inline-start: 4px;
     color: var(--text-placeholder);
   }
   input {
