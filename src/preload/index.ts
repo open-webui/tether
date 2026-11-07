@@ -62,6 +62,7 @@ const api: TetherAPI = {
   installPackage: () => ipcRenderer.invoke('runtime:install'),
   uninstallPackage: () => ipcRenderer.invoke('runtime:uninstall'),
   restartTerminal: () => ipcRenderer.invoke('runtime:restart'),
+  copyTerminalCredentials: () => ipcRenderer.invoke('runtime:copyCredentials'),
   onRuntimeState: (callback) => {
     const handler = (_event: Electron.IpcRendererEvent, state: RuntimeState): void =>
       callback(state)

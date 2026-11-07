@@ -43,6 +43,7 @@ export interface TetherAPI {
   installPackage: () => Promise<void>
   uninstallPackage: () => Promise<void>
   restartTerminal: () => Promise<void>
+  copyTerminalCredentials: () => Promise<void>
   onRuntimeState: (callback: (state: RuntimeState) => void) => () => void
   listConnections: () => Promise<ConnectionState>
   addConnection: (input: {

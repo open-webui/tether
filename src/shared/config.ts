@@ -2,6 +2,8 @@ export interface LocalServerConfig {
   enabled: boolean
   version: string
   autoUpdate: boolean
+  httpEnabled: boolean
+  httpHost: '127.0.0.1' | '0.0.0.0'
   homeDirectory?: string
   env?: Record<string, string>
 }
@@ -113,6 +115,7 @@ export interface AppConfig extends GeneralConfig {
 
 export interface RuntimeState {
   version: string | null
+  ipcSupported?: boolean
   status: string
   busy: boolean
   error: string
@@ -125,6 +128,10 @@ export function parseLocalServerConfig(value: unknown): LocalServerConfig {
     throw new Error('Invalid Open Terminal settings')
   if (typeof config.version !== 'string' || typeof config.autoUpdate !== 'boolean')
     throw new Error('Invalid Open Terminal settings')
+  if (config.httpEnabled !== undefined && typeof config.httpEnabled !== 'boolean')
+    throw new Error('Invalid HTTP setting')
+  if (config.httpHost !== undefined && !['127.0.0.1', '0.0.0.0'].includes(config.httpHost))
+    throw new Error('Invalid HTTP bind address')
   if (
     config.homeDirectory !== undefined &&
     (typeof config.homeDirectory !== 'string' || config.homeDirectory.includes('\0'))
@@ -170,6 +177,8 @@ export function parseLocalServerConfig(value: unknown): LocalServerConfig {
     enabled: config.enabled ?? false,
     version,
     autoUpdate: config.autoUpdate,
+    httpEnabled: config.httpEnabled ?? false,
+    httpHost: config.httpHost ?? '127.0.0.1',
     homeDirectory: config.homeDirectory?.trim() ?? '',
     ...(env === undefined ? {} : { env: { ...env } })
   }

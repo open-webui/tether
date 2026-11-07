@@ -283,6 +283,11 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
     if (syncTheme && 'theme' in patch) connections.syncTheme(next.theme)
     updateTray()
     if (next.deviceName !== previous.deviceName) connections.updateDeviceName()
+    if (
+      localServer.httpEnabled !== previousServer.httpEnabled ||
+      (localServer.httpEnabled && localServer.httpHost !== previousServer.httpHost)
+    )
+      await connections.applyTerminalTransport()
   })
   savingConfig = operation.catch(() => {})
   return operation

@@ -3,7 +3,6 @@ import { app } from 'electron'
 import log from 'electron-log'
 import { randomBytes } from 'node:crypto'
 import { access, rm, writeFile } from 'node:fs/promises'
-import { createServer } from 'node:net'
 import { homedir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import type { LocalServerConfig, RuntimeState } from '../shared/config'
@@ -12,9 +11,13 @@ import { Runtime } from './runtime'
 import type { RelayDestination } from './relay'
 import { ManagedService, waitForReady } from './process/managedService'
 import { spawnPty } from './process/nativePty'
+import { createTerminalEndpoint, readTerminalJSON } from './process/terminalEndpoint'
 
 export interface TerminalHandle {
   url: string
+  socketPath?: string
+  httpUrl?: string
+  cleanup(): Promise<void>
   key: string
   capabilities: Record<string, boolean>
   service: ManagedService
@@ -24,16 +27,20 @@ export interface TerminalHandle {
 export class OpenTerminal {
   private closed = false
   private installation?: Promise<void>
+  private supportsIPC = false
   private state: RuntimeState = { version: null, status: '', busy: false, error: '' }
   private runtime = new Runtime('python', (data) => this.append(data))
   private services = new Map<string | null, ManagedService>()
   private handles = new Map<string | null, TerminalHandle>()
+  private cleanups = new Set<Promise<void>>()
 
   constructor(
     private getConfig: () => LocalServerConfig = () => ({
       enabled: false,
       version: '',
-      autoUpdate: false
+      autoUpdate: false,
+      httpEnabled: false,
+      httpHost: '127.0.0.1'
     }),
     private changed: (state: RuntimeState) => void = () => {},
     private output: (id: string | null, data: string) => void = () => {}
@@ -73,6 +80,7 @@ export class OpenTerminal {
       throw new Error('Forbidden terminal path')
     return {
       url: handle.url,
+      socketPath: handle.socketPath,
       headers: { Authorization: 'Bearer ' + handle.key },
       ...(websocket && !url.pathname.startsWith('/browser/view/')
         ? {
@@ -89,6 +97,18 @@ export class OpenTerminal {
 
   async restart(): Promise<void> {
     await Promise.all([...this.services.values()].map((service) => service.stop()))
+    await Promise.all(this.cleanups)
+  }
+
+  credentials(id: string | null): { url: string; apiKey: string } {
+    const handle = this.handles.get(id)
+    if (
+      !this.getConfig().httpEnabled ||
+      !handle?.httpUrl ||
+      handle.service.info.status !== 'started'
+    )
+      throw new Error('HTTP access is not running for this connection.')
+    return { url: handle.httpUrl, apiKey: handle.key }
   }
 
   async installPackage(): Promise<void> {
@@ -115,7 +135,7 @@ export class OpenTerminal {
     try {
       await this.runtime.uninstallPackage('open-terminal', (status) => this.setState({ status }))
       await rm(join(this.runtime.directory, '.install-incomplete'), { force: true })
-      this.setState({ version: null })
+      this.setState({ version: null, ipcSupported: undefined })
     } catch (error) {
       this.setState({ error: String(error).replace(/^Error: /, '') })
       throw error
@@ -147,6 +167,17 @@ export class OpenTerminal {
           log.info('[terminal ' + (id ?? 'setup') + '] ' + event.data)
           this.output(id, event.data)
         } else if (event.type === 'state') {
+          if (event.info.pid === null && ['stopped', 'failed'].includes(event.info.status)) {
+            const handle = this.handles.get(id)
+            if (handle) {
+              const cleanup = handle
+                .cleanup()
+                .catch((error) => log.warn('Terminal cleanup failed:', error))
+              this.cleanups.add(cleanup)
+              void cleanup.finally(() => this.cleanups.delete(cleanup))
+              this.handles.delete(id)
+            }
+          }
           this.changed({ ...this.state })
         }
       })
@@ -222,6 +253,8 @@ export class OpenTerminal {
         `Open Terminal ${version} lacks Tether's isolated configuration support. A compatible Open Terminal release is required.`
       )
     }
+    this.supportsIPC = stdout.includes('--ipc')
+    this.setState({ ipcSupported: this.supportsIPC })
   }
 
   async start(id: string | null, status: (message: string) => void): Promise<TerminalHandle> {
@@ -230,23 +263,25 @@ export class OpenTerminal {
       await this.install(status)
       signal.throwIfAborted()
       this.runtime.signal.throwIfAborted()
-      const port = await new Promise<number>((resolve, reject) => {
-        const server = createServer()
-        server.once('error', reject)
-        server.listen(0, '127.0.0.1', () => {
-          const address = server.address()
-          if (!address || typeof address === 'string') {
-            server.close()
-            reject(new Error('No local port available'))
-            return
-          }
-          server.close(() => resolve(address.port))
-        })
+      const config = this.getConfig()
+      const host = config.httpEnabled ? config.httpHost : '127.0.0.1'
+      const endpoint = await createTerminalEndpoint({
+        ipc: this.supportsIPC,
+        http: config.httpEnabled || !this.supportsIPC,
+        host
       })
       const key = randomBytes(48).toString('base64url')
-      const url = 'http://127.0.0.1:' + port
+      const httpUrl = endpoint.port === undefined ? undefined : 'http://127.0.0.1:' + endpoint.port
+      const url = endpoint.socketPath ? 'http://127.0.0.1' : httpUrl!
+      if (!this.supportsIPC)
+        service.append(
+          `Open Terminal ${this.state.version} does not support IPC; using authenticated HTTP on ${host}.\r\n`
+        )
       const handle: TerminalHandle = {
         url,
+        socketPath: endpoint.socketPath,
+        httpUrl,
+        cleanup: endpoint.cleanup,
         key,
         capabilities: {},
         service,
@@ -260,18 +295,16 @@ export class OpenTerminal {
           'open_terminal',
           'run',
           '--isolated',
-          '--host',
-          '127.0.0.1',
-          '--port',
-          String(port),
+          ...(endpoint.socketPath ? ['--ipc', endpoint.socketPath] : []),
+          ...(endpoint.port === undefined ? [] : ['--port', String(endpoint.port), '--host', host]),
           '--cors-allowed-origins',
           ''
         ],
-        cwd: this.getConfig().homeDirectory || homedir(),
+        cwd: config.homeDirectory || homedir(),
         env: Object.fromEntries(
           Object.entries({
             ...this.environment(),
-            ...this.getConfig().env,
+            ...config.env,
             OPEN_TERMINAL_ISOLATED: 'true',
             OPEN_TERMINAL_API_KEY: key,
             OPEN_TERMINAL_ENABLE_NOTEBOOKS: 'false',
@@ -280,19 +313,15 @@ export class OpenTerminal {
             OPEN_TERMINAL_LOG_DIR: join(app.getPath('logs'), 'terminal', id ?? 'local')
           }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
         ),
-        url,
+        url: httpUrl,
         ready: (signal) =>
           waitForReady(
             async (signal) => {
-              const response = await fetch(url + '/files/cwd', {
-                headers: { Authorization: 'Bearer ' + key },
-                signal
-              })
-              if (!response.ok) return false
-              const configResponse = await fetch(url + '/api/config', { signal })
-              if (!configResponse.ok) return false
-              const config = (await configResponse.json()) as { features?: Record<string, boolean> }
-              handle.capabilities = { files: true, ...config.features }
+              await readTerminalJSON(handle, '/files/cwd', key, signal)
+              const discovery = (await readTerminalJSON(handle, '/api/config', key, signal)) as {
+                features?: Record<string, boolean>
+              }
+              handle.capabilities = { files: true, ...discovery.features }
               return true
             },
             signal,
@@ -312,5 +341,6 @@ export class OpenTerminal {
       ...[...this.services.values()].map((service) => service.shutdown())
     ])
     await this.installation?.catch(() => {})
+    await Promise.all(this.cleanups)
   }
 }

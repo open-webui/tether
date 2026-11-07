@@ -1,6 +1,7 @@
 import { t, setLanguage } from './i18n'
 import {
   app,
+  clipboard,
   desktopCapturer,
   dialog,
   ipcMain,
@@ -302,6 +303,12 @@ export class Connections {
     }
   }
 
+  async applyTerminalTransport(): Promise<void> {
+    // An install/uninstall already owns relaunching. Still close any old listener now.
+    if (this.updatingRuntime) await this.terminal.restart()
+    else await this.restartTerminal()
+  }
+
   private registerIPC(): void {
     ipcMain.handle('terminal:height', (event, height: number) => {
       this.shellSender(event)
@@ -370,6 +377,10 @@ export class Connections {
     ipcMain.handle('runtime:restart', (event) => {
       this.shellSender(event)
       return this.restartTerminal()
+    })
+    ipcMain.handle('runtime:copyCredentials', (event) => {
+      this.shellSender(event)
+      clipboard.writeText(JSON.stringify(this.terminal.credentials(this.store.selected), null, 2))
     })
     ipcMain.handle('runtime:install', (event) => {
       this.shellSender(event)

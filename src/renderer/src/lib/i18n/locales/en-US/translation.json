@@ -206,5 +206,14 @@
   "runtime.downloadingPython": "Downloading Python",
   "terminal.installing": "Installing Open Terminal…",
   "terminal.updating": "Updating Open Terminal…",
-  "terminal.uninstalling": "Uninstalling Open Terminal…"
+  "terminal.uninstalling": "Uninstalling Open Terminal…",
+  "settings.terminal.httpAccess": "Allow HTTP access",
+  "settings.terminal.httpAccessDesc": "Off by default when IPC is supported. Older versions use authenticated localhost HTTP. Changing HTTP settings restarts Open Terminal and interrupts active sessions.",
+  "settings.terminal.httpFallback": "This Open Terminal version does not support IPC. Tether is using authenticated localhost HTTP even with this setting off. Update Open Terminal to use private IPC.",
+  "settings.terminal.httpHost": "Listen on",
+  "settings.terminal.httpLoopback": "This computer (127.0.0.1)",
+  "settings.terminal.httpAllInterfaces": "All interfaces (0.0.0.0)",
+  "settings.terminal.httpNetworkDesc": "Other devices can connect using this computer’s network address and API key. HTTP traffic is unencrypted.",
+  "settings.terminal.copyCredentials": "Copy URL and API key",
+  "settings.terminal.httpCredentialsDesc": "Copies access for the selected connection. The port and key change after restart. For other devices, replace 127.0.0.1 with this computer’s network address."
 }
