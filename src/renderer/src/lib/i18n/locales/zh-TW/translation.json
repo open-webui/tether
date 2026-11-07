@@ -48,6 +48,7 @@
   "common.stopped": "已停止",
   "common.failed": "失敗",
   "settings.back": "回上一頁",
+  "settings.sendFeedback": "傳送意見回饋",
   "settings.search": "搜尋設定",
   "settings.noResults": "沒有符合的設定",
   "settings.tabs.general": "一般",

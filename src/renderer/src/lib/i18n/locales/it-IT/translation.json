@@ -48,6 +48,7 @@
   "common.stopped": "Arrestato",
   "common.failed": "Non riuscito",
   "settings.back": "Indietro",
+  "settings.sendFeedback": "Invia feedback",
   "settings.search": "Cerca impostazioni",
   "settings.noResults": "Nessuna impostazione corrispondente",
   "settings.tabs.general": "Generale",

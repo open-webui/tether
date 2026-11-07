@@ -48,6 +48,7 @@
   "common.stopped": "متوقف",
   "common.failed": "فشل",
   "settings.back": "عودة",
+  "settings.sendFeedback": "إرسال ملاحظات",
   "settings.search": "البحث في الإعدادات",
   "settings.noResults": "لا توجد إعدادات مطابقة",
   "settings.tabs.general": "عام",

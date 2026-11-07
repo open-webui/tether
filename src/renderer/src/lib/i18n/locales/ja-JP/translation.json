@@ -48,6 +48,7 @@
   "common.stopped": "停止中",
   "common.failed": "失敗",
   "settings.back": "戻る",
+  "settings.sendFeedback": "フィードバックを送信",
   "settings.search": "設定を検索",
   "settings.noResults": "一致する設定はありません",
   "settings.tabs.general": "一般",

@@ -7,6 +7,7 @@
   import SearchIcon from 'iconoir/icons/search.svg?raw'
   import InfoCircleIcon from 'iconoir/icons/info-circle.svg?raw'
   import TerminalIcon from 'iconoir/icons/terminal.svg?raw'
+  import BugIcon from 'iconoir/icons/bug.svg?raw'
   import OpenTerminal from './Settings/OpenTerminal.svelte'
   import General from './Settings/General.svelte'
   import SettingsIcon from 'iconoir/icons/settings.svg?raw'
@@ -148,7 +149,7 @@
               class="flex h-[28px] shrink-0 items-center gap-[6px] rounded-[8px] px-[8px] text-start transition-colors duration-75 md:w-full {settingsTab ===
               tab.id
                 ? 'bg-gray-50 font-medium text-gray-900 dark:bg-white/[0.04] dark:text-white'
-                : 'text-gray-800 hover:text-gray-900 dark:text-gray-200 dark:hover:text-gray-100'}"
+                : 'text-gray-700 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100'}"
               aria-current={settingsTab === tab.id ? 'page' : undefined}
               onclick={() => (settingsTab = tab.id)}
             >
@@ -163,6 +164,22 @@
             </div>
           {/each}
         </div>
+
+        <button
+          type="button"
+          class="mx-1 mt-1 mb-[6px] flex min-h-[28px] shrink-0 items-center gap-[6px] rounded-[8px] px-[8px] py-1 text-start text-gray-700 transition-colors duration-75 hover:text-gray-900 dark:text-gray-300 dark:hover:text-gray-100"
+          onclick={() =>
+            window.open(
+              'https://github.com/open-webui/tether/issues/new/choose',
+              '_blank',
+              'noopener,noreferrer'
+            )}
+        >
+          <span class="inline-flex size-[14px] shrink-0 [&>svg]:size-full" aria-hidden="true"
+            >{@html BugIcon}</span
+          >
+          {$i18n.t('settings.sendFeedback')}
+        </button>
       </nav>
 
       <div class="flex min-h-0 min-w-0 flex-1 flex-col p-[16px] md:px-[20px]">

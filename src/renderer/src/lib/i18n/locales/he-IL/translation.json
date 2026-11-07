@@ -48,6 +48,7 @@
   "common.stopped": "נעצר",
   "common.failed": "נכשל",
   "settings.back": "חזור",
+  "settings.sendFeedback": "שליחת משוב",
   "settings.search": "חיפוש בהגדרות",
   "settings.noResults": "לא נמצאו הגדרות תואמות",
   "settings.tabs.general": "כללי",

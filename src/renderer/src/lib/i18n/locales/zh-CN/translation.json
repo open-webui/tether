@@ -48,6 +48,7 @@
   "common.stopped": "已停止",
   "common.failed": "失败",
   "settings.back": "返回",
+  "settings.sendFeedback": "发送反馈",
   "settings.search": "搜索设置",
   "settings.noResults": "没有匹配的设置",
   "settings.tabs.general": "通用",

@@ -48,6 +48,7 @@
   "common.stopped": "중지됨",
   "common.failed": "실패",
   "settings.back": "뒤로",
+  "settings.sendFeedback": "피드백 보내기",
   "settings.search": "설정 검색",
   "settings.noResults": "일치하는 설정이 없습니다",
   "settings.tabs.general": "일반",

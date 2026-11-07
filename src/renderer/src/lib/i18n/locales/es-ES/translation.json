@@ -48,6 +48,7 @@
   "common.stopped": "Detenido",
   "common.failed": "Fallido",
   "settings.back": "Volver",
+  "settings.sendFeedback": "Enviar comentarios",
   "settings.search": "Buscar ajustes",
   "settings.noResults": "No se encontraron ajustes",
   "settings.tabs.general": "General",

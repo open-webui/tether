@@ -48,6 +48,7 @@
   "common.stopped": "Спряно",
   "common.failed": "Неуспешно",
   "settings.back": "Назад",
+  "settings.sendFeedback": "Изпращане на отзив",
   "settings.search": "Търсене в настройките",
   "settings.noResults": "Няма съвпадащи настройки",
   "settings.tabs.general": "Общи",

@@ -48,6 +48,7 @@
   "common.stopped": "Arrêté",
   "common.failed": "Échoué",
   "settings.back": "Retour en arrière",
+  "settings.sendFeedback": "Envoyer des commentaires",
   "settings.search": "Rechercher dans les paramètres",
   "settings.noResults": "Aucun paramètre correspondant",
   "settings.tabs.general": "Général",
