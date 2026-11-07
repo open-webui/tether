@@ -743,17 +743,15 @@ export class Connections {
   private layout(): void {
     if (!this.window) return
     const [width, height] = this.window.getContentSize()
-    const titlebarHeight = process.platform === 'darwin' ? 28 : 32
+    const zoom = this.window.webContents.getZoomFactor()
+    const titlebarHeight = Math.ceil((process.platform === 'darwin' ? 28 : 32) * zoom)
     for (const [id, view] of this.views) {
       view.setVisible(id === this.store.selected && !this.settingsOpen)
       view.setBounds({
         x: 0,
         y: titlebarHeight,
         width,
-        height: Math.max(
-          0,
-          height - titlebarHeight - 24 - Math.min(this.terminalHeight, Math.max(0, height - 160))
-        )
+        height: Math.max(0, height - titlebarHeight - Math.ceil((24 + this.terminalHeight) * zoom))
       })
     }
   }
