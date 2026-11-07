@@ -17,7 +17,7 @@
   let state = $state<ConnectionState>({
     connections: [],
     selected: null,
-    title: 'Tether',
+    title: 'Open WebUI Tether',
     terminalStatus: 'stopped',
     webuiConnected: false,
     errors: {},

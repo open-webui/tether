@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-11-07
+
+### Added
+
+- **Choose whether other apps can connect to Open Terminal directly.** In **Settings → Open Terminal**, turn on **Allow HTTP access** to make a connection address available. Choose **This computer** for local access or **All interfaces** to allow connections from other devices using your computer's network address. An API key is required, and these direct connections are not encrypted. Changing either setting automatically restarts Open Terminal and interrupts active sessions.
+- **Copy Open Terminal connection details.** With HTTP access enabled, click **Copy URL and API key** to copy the address and key for the selected WebUI connection. Both change when Open Terminal restarts. When connecting from another device, replace `127.0.0.1` in the copied address with your computer's network address.
+
+### Changed
+
+- **The desktop app is now named Open WebUI Tether.** The installed app, shortcuts, window titles, menus, and About screen use the full name so it is easier to recognize on your computer.
+
+- **Open Terminal runs without a direct connection address by default when supported.** Tether now uses a private local connection with newer Open Terminal versions, while your saved WebUI connections continue to work. Older versions automatically keep using an API-key-protected connection on this computer, even when **Allow HTTP access** is off. Settings shows when this fallback is active and explains that updating Open Terminal is required to turn off direct access.
+- **Issue reports include your setup.** The GitHub issue form now requires your Tether version and platform, asks what happened and how to reproduce it, and automatically adds the version and platform to the issue title. Editing those fields updates the title too.
+- **Open WebUI website link in About.** Click the **Open WebUI Inc.** copyright line in **Settings → About** to open **openwebui.com** in your browser.
+
 ## [0.1.7] - 2026-11-07
 
 ### Added

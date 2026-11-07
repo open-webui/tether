@@ -197,7 +197,7 @@ export class Connections {
       ),
       title: this.settingsOpen
         ? t('settings.title')
-        : (selected && this.titles.get(selected.id)) || selected?.name || 'Tether',
+        : (selected && this.titles.get(selected.id)) || selected?.name || 'Open WebUI Tether',
       errors: this.errors,
       persistentCredentials: this.store.persistentCredentials
     }

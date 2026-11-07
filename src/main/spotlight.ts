@@ -92,7 +92,7 @@ export class Spotlight {
     if (this.loading) return
     if (!this.window) {
       const window = new BrowserWindow({
-        title: 'Tether Spotlight',
+        title: 'Open WebUI Tether Spotlight',
         frame: false,
         transparent: true,
         show: false,
@@ -209,7 +209,7 @@ export class Spotlight {
           systemPreferences.getMediaAccessStatus('screen') === 'denied'
         )
           throw new Error(
-            'Allow Tether in System Settings → Privacy & Security → Screen Recording, then reopen Tether.'
+            'Allow Open WebUI Tether in System Settings → Privacy & Security → Screen Recording, then reopen Open WebUI Tether.'
           )
         if (this.useScreenPicker) window.hide()
         else window.setOpacity(0)

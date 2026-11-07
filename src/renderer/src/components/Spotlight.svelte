@@ -240,7 +240,7 @@
     style:width={`${barWidth}px`}
   >
     <div class="mb-[8px] flex items-center gap-[12px] text-[11px] text-gray-600 dark:text-gray-400">
-      <span class="cursor-move font-medium">Tether</span>
+      <span class="cursor-move font-medium">Open WebUI Tether</span>
       {#if connections.length}
         <select
           aria-label={$i18n.t('spotlight.destination')}
