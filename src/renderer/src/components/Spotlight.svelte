@@ -1,5 +1,5 @@
 <script lang="ts">
-  import i18n from '../lib/i18n'
+  import i18n, { changeLanguage } from '../lib/i18n'
   /* eslint-disable svelte/no-at-html-tags -- Icons are static SVG imports from Iconoir. */
   import { onMount, tick } from 'svelte'
   import ArrowUp from 'iconoir/icons/arrow-up.svg?raw'
@@ -190,6 +190,7 @@
       document.documentElement.classList.toggle('dark', state.dark)
       document.documentElement.style.colorScheme = state.dark ? 'dark' : 'light'
       if (!query && !files.length && !busy && state.clipboard) query = state.clipboard
+      await changeLanguage(state.language)
       await focusInput()
     })
     const offHide = api.onHide(() => {

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { app } from 'electron'
 import log from 'electron-log'
 import { randomBytes } from 'node:crypto'
@@ -110,7 +111,7 @@ export class OpenTerminal {
     this.installation = undefined
     this.handles.clear()
     this.runtime = new Runtime('python', (data) => this.append(data))
-    this.setState({ busy: true, status: 'Uninstalling Open Terminal…', error: '' })
+    this.setState({ busy: true, status: t('terminal.uninstalling'), error: '' })
     try {
       await this.runtime.uninstallPackage('open-terminal', (status) => this.setState({ status }))
       await rm(join(this.runtime.directory, '.install-incomplete'), { force: true })
@@ -205,7 +206,7 @@ export class OpenTerminal {
     ) {
       // Like Desktop, an interrupted package change must be repaired before starting the service.
       await writeFile(marker, '', { mode: 0o600 })
-      status(installed ? 'Updating Open Terminal…' : 'Installing Open Terminal…')
+      status(installed ? t('terminal.updating') : t('terminal.installing'))
       await this.runtime.installPackage('open-terminal', config.version, repair, status)
       await this.runtime.execute(['-c', 'import open_terminal, uvicorn'], this.environment())
       await rm(marker, { force: true })

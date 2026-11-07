@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-11-07
+
+### Added
+
+- **Send feedback from Settings.** Click **Send feedback** at the bottom of the Settings sidebar to open Tether's GitHub issue form in your browser. The button is available from every Settings tab and translated into all 16 supported languages.
+
+### Changed
+
+- **Simpler app and menu-bar icons.** Replaced the dense dotted artwork with a small grid of larger black and gray dots on a plain white background. Updated the Mac, Windows, and Linux app icons, along with the matching monochrome Mac menu-bar symbol and its Retina version.
+- **Clearer Settings selection.** Inactive Settings items and the feedback button now use a slightly more muted color in light and dark mode, making the selected item and hover state stand out more.
+
 ## [0.1.6] - 2026-11-07
 
 ### Fixed
