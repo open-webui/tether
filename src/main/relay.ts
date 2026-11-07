@@ -4,6 +4,7 @@ import { connect } from 'node:net'
 import WebSocket from 'ws'
 import type { Sessions } from './sessions'
 import { endpoint, type Connection } from '../shared/connections'
+import { connectionTLS } from './network'
 
 const CHUNK = 64 * 1024
 const WINDOW = 2 * 1024 * 1024
@@ -129,6 +130,7 @@ export class Relay {
       const url = new URL(endpoint(this.connection.url, 'api/v1/tether/connect'))
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       const socket = new WebSocket(url, {
+        ...connectionTLS(this.connection),
         maxPayload: CHUNK + 4100,
         handshakeTimeout: 20000,
         followRedirects: false

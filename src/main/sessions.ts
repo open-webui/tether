@@ -1,8 +1,9 @@
-import { net, shell } from 'electron'
+import { shell } from 'electron'
 import { createServer } from 'node:http'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { endpoint, type AccessToken, type Connection } from '../shared/connections'
 import { Store, type Credential } from './store'
+import { connectionSession } from './network'
 
 interface SessionResponse {
   session_id: string
@@ -45,7 +46,8 @@ export class Sessions {
     body?: unknown,
     method?: string
   ): Promise<T> {
-    const response = await net.fetch(endpoint(this.connection(id).url, path), {
+    const connection = this.connection(id)
+    const response = await connectionSession(connection).fetch(endpoint(connection.url, path), {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
       credentials: 'omit',
       headers: {

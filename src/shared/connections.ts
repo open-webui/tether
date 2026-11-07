@@ -6,6 +6,7 @@ export interface Connection {
   id: string
   name: string
   url: string
+  trustedCertificate?: string
 }
 
 export interface ConnectionState {
