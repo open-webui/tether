@@ -54,12 +54,15 @@ export function endpoint(url: string, path: string): string {
 export const connectionRedirectError =
   'WebUI redirects to a different address. Edit the connection to use its final address, including https:// if required.'
 
-export async function validateConnectionURL(value: string): Promise<string> {
+export async function validateConnectionURL(
+  value: string,
+  fetch: (url: string, options: RequestInit) => Promise<Response>
+): Promise<string> {
   const url = normalizeURL(value.trim())
   const signal = AbortSignal.timeout(15000)
   const request = async (address: string): Promise<Response> => {
     try {
-      return await fetch(address, { redirect: 'manual', signal })
+      return await fetch(address, { redirect: 'manual', credentials: 'omit', signal })
     } catch {
       throw new Error('Could not reach WebUI. Check the address, HTTP/HTTPS, and your network.')
     }
