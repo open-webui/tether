@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-11-07
+
+### Fixed
+
+- **Terminal panel cannot close when zoomed in.** At zoom levels such as 120% or 150%, the WebUI page could cover the terminal panel's close button and other controls. Tether now keeps the page within the available space as you zoom or resize the window, leaving those controls visible and clickable.
+- **Connection and sign-in failures with system proxies.** Checking a WebUI address, signing in, and renewing your sign-in now use the same network settings as Tether's built-in browser, including your system proxy. This fixes cases where Tether rejected a reachable WebUI address or could not start sign-in because those requests were taking a different network route.
+
 ## [0.1.5] - 2026-11-07
 
 ### Changed
