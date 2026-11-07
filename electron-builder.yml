@@ -1,5 +1,5 @@
 appId: com.openwebui.tether
-productName: Tether
+productName: Open WebUI Tether
 directories:
   buildResources: build
 files:
@@ -33,7 +33,7 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSLocationUsageDescription: Tether uses your location when you enable location sharing in Open WebUI.
+    NSLocationUsageDescription: Open WebUI Tether uses your location when you enable location sharing in Open WebUI.
     NSCameraUsageDescription: Application requests access to the device's camera.
     NSMicrophoneUsageDescription: Application requests access to the device's microphone.
     NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.

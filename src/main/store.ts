@@ -33,7 +33,13 @@ export class Store {
   connections: Connection[] = []
   selected: string | null = null
   general: GeneralConfig = { ...defaultGeneralConfig }
-  localServer: LocalServerConfig = { enabled: false, version: '', autoUpdate: false }
+  localServer: LocalServerConfig = {
+    enabled: false,
+    version: '',
+    autoUpdate: false,
+    httpEnabled: false,
+    httpHost: '127.0.0.1'
+  }
   credentials: Record<string, Credential> = {}
   persistentCredentials = false
   private queue: Promise<void> = Promise.resolve()

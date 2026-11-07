@@ -43,6 +43,10 @@
   let defaultHomeDirectory = $state('')
   let enabled = $state(false)
   let autoUpdate = $state(false)
+  let httpEnabled = $state(false)
+  let httpHost = $state<'127.0.0.1' | '0.0.0.0'>('127.0.0.1')
+  let transportSaving = $state(false)
+  let accessCopied = $state(false)
   let env = $state<{ name: string; value: string }[]>([])
   let advancedOpen = $state(false)
   let restarting = $state(false)
@@ -52,7 +56,9 @@
   let uninstalling = $state(false)
   let error = $state('')
   let saving: Promise<void> = Promise.resolve()
-  const busy = $derived(runtime.busy || installing || uninstalling || restarting || !loaded)
+  const busy = $derived(
+    runtime.busy || installing || uninstalling || restarting || transportSaving || !loaded
+  )
   const capabilities = $derived([
     {
       name: 'OPEN_TERMINAL_ENABLE_BROWSER',
@@ -102,6 +108,8 @@
         enabled,
         version,
         autoUpdate,
+        httpEnabled,
+        httpHost,
         homeDirectory,
         env: Object.fromEntries(entries.map((row) => [row.name.trim(), row.value]))
       })
@@ -115,6 +123,32 @@
     void save().catch((cause) => {
       error = String(cause).replace(/^Error: /, '')
     })
+  }
+
+  async function saveTransport(): Promise<void> {
+    transportSaving = true
+    accessCopied = false
+    error = ''
+    try {
+      await save()
+    } catch (cause) {
+      error = String(cause).replace(/^Error: /, '')
+      const config = (await window.api.getConfig()).localServer
+      httpEnabled = config.httpEnabled
+      httpHost = config.httpHost
+    } finally {
+      transportSaving = false
+    }
+  }
+
+  async function copyCredentials(): Promise<void> {
+    error = ''
+    try {
+      await window.api.copyTerminalCredentials()
+      accessCopied = true
+    } catch (cause) {
+      error = String(cause).replace(/^Error: /, '')
+    }
   }
 
   async function chooseDirectory(variable?: string): Promise<void> {
@@ -196,6 +230,8 @@
         defaultHomeDirectory = info.homeDirectory
         enabled = config.localServer.enabled
         autoUpdate = config.localServer.autoUpdate
+        httpEnabled = config.localServer.httpEnabled
+        httpHost = config.localServer.httpHost
         env = Object.entries(config.localServer.env ?? {}).map(([name, value]) => ({ name, value }))
         runtime = state
         loaded = true
@@ -384,6 +420,53 @@
           />
         </div>
       {/if}
+    {/if}
+  </section>
+  <section class="mt-5" aria-label={$i18n.t('settings.terminal.httpAccess')}>
+    {#if runtime.ipcSupported === false && !httpEnabled}
+      <p class="setting-description" role="status">{$i18n.t('settings.terminal.httpFallback')}</p>
+    {/if}
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">{$i18n.t('settings.terminal.httpAccess')}</div>
+        <p class="setting-description">{$i18n.t('settings.terminal.httpAccessDesc')}</p>
+      </div>
+      <Switch
+        checked={httpEnabled}
+        label={$i18n.t('settings.terminal.httpAccess')}
+        disabled={busy}
+        onchange={(value) => {
+          httpEnabled = value
+          void saveTransport()
+        }}
+      />
+    </div>
+    {#if httpEnabled}
+      <div class="setting-row">
+        <label class="setting-label" for="terminal-http-host"
+          >{$i18n.t('settings.terminal.httpHost')}</label
+        >
+        <select
+          id="terminal-http-host"
+          class="env-input w-auto!"
+          value={httpHost}
+          disabled={busy}
+          onchange={(event) => {
+            httpHost = event.currentTarget.value as typeof httpHost
+            void saveTransport()
+          }}
+        >
+          <option value="127.0.0.1">{$i18n.t('settings.terminal.httpLoopback')}</option>
+          <option value="0.0.0.0">{$i18n.t('settings.terminal.httpAllInterfaces')}</option>
+        </select>
+      </div>
+      {#if httpHost === '0.0.0.0'}
+        <p class="setting-description">{$i18n.t('settings.terminal.httpNetworkDesc')}</p>
+      {/if}
+      <button class="env-action mt-2" disabled={busy || !enabled} onclick={copyCredentials}>
+        {accessCopied ? $i18n.t('logs.copied') : $i18n.t('settings.terminal.copyCredentials')}
+      </button>
+      <p class="setting-description">{$i18n.t('settings.terminal.httpCredentialsDesc')}</p>
     {/if}
   </section>
   <section class="mt-5" aria-label={$i18n.t('settings.terminal.homeDirectory')}>

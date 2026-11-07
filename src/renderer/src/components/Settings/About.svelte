@@ -212,7 +212,13 @@
       {error}
     </p>{/if}
   <p class="mt-6 text-[11px] leading-[16px] text-[oklch(0.51_0_0)] dark:text-[oklch(0.77_0_0)]">
-    {$i18n.t('settings.about.copyright', { year: new Date().getFullYear() })}
+    <a
+      href="https://openwebui.com"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="hover:underline"
+      >{$i18n.t('settings.about.copyright', { year: new Date().getFullYear() })}</a
+    >
   </p>
 </div>
 

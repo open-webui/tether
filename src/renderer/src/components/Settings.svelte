@@ -33,7 +33,12 @@
       label: 'Open Terminal',
       icon: TerminalIcon,
       group: $i18n.t('settings.groups.services'),
-      keywords: $i18n.t('settings.terminal.searchTerms')
+      keywords: [
+        $i18n.t('settings.terminal.searchTerms'),
+        $i18n.t('settings.terminal.httpAccess'),
+        $i18n.t('settings.terminal.httpHost'),
+        '127.0.0.1 0.0.0.0'
+      ].join(' ')
     },
     {
       id: 'about',

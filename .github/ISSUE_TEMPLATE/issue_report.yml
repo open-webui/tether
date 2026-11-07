@@ -1,0 +1,40 @@
+name: Issue report
+description: Report a bug or ask for help with Tether.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Give your issue a short, descriptive title. We will automatically format it as `[version] [platform] issue title` using the fields below.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Which version of Tether are you using?
+      placeholder: '0.1.7'
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Include your operating system and architecture.
+      placeholder: Windows 11 x64, macOS arm64, or Ubuntu 24.04 x64
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the issue or question, including what you expected and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: For bugs, list the steps needed to reproduce the issue.
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Include relevant screenshots, error messages, and your Open WebUI or Open Terminal version and setup. Remove secrets from logs before sharing.

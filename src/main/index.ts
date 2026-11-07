@@ -37,6 +37,7 @@ import { Spotlight } from './spotlight'
 import { setTooltip } from './tooltip'
 import { attachContextMenu } from './contextMenu'
 
+// Keep Electron's storage and encryption identity stable across display-name changes.
 app.setName('Tether')
 const connections = new Connections((theme) => saveConfig({ theme }, false))
 log.initialize()
@@ -92,7 +93,7 @@ function openExternal(url: string): void {
 function createMainWindow(show = true): void {
   const saved = connections.store.general.windowBounds
   const options: Electron.BrowserWindowConstructorOptions = {
-    title: 'Tether',
+    title: 'Open WebUI Tether',
     width: saved?.width ?? 960,
     height: saved?.height ?? 680,
     minWidth: 480,
@@ -283,6 +284,11 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
     if (syncTheme && 'theme' in patch) connections.syncTheme(next.theme)
     updateTray()
     if (next.deviceName !== previous.deviceName) connections.updateDeviceName()
+    if (
+      localServer.httpEnabled !== previousServer.httpEnabled ||
+      (localServer.httpEnabled && localServer.httpHost !== previousServer.httpHost)
+    )
+      await connections.applyTerminalTransport()
   })
   savingConfig = operation.catch(() => {})
   return operation
@@ -338,7 +344,7 @@ function registerIPC(): void {
     (): AppInfo => ({
       deviceName: connections.store.deviceName,
       homeDirectory: homedir(),
-      name: app.name,
+      name: 'Open WebUI Tether',
       version: app.getVersion(),
       platform: process.platform
     })
@@ -377,7 +383,7 @@ function registerIPC(): void {
 
 function createMenus(): void {
   app.setAboutPanelOptions({
-    applicationName: 'Tether',
+    applicationName: 'Open WebUI Tether',
     applicationVersion: app.getVersion(),
     copyright: t('settings.about.copyright', { year: new Date().getFullYear() }),
     website: 'https://github.com/open-webui/tether',
@@ -390,7 +396,7 @@ function createMenus(): void {
   const updateItem = { label: t('settings.about.checkUpdates'), click: checkUpdates }
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'Tether',
+      label: 'Open WebUI Tether',
       submenu: [
         { label: t('settings.about.title'), click: () => app.showAboutPanel() },
         updateItem,
@@ -399,13 +405,13 @@ function createMenus(): void {
           ? ([
               { role: 'services' },
               { type: 'separator' },
-              { role: 'hide' },
+              { role: 'hide', label: t('menu.hide') },
               { role: 'hideOthers' },
               { role: 'unhide' },
               { type: 'separator' }
             ] as Electron.MenuItemConstructorOptions[])
           : []),
-        { role: 'quit' }
+        { role: 'quit', label: t('menu.quit') }
       ]
     },
     { role: 'editMenu' },
@@ -457,7 +463,7 @@ function updateTray(): void {
   }
   if (!tray) {
     tray = new Tray(createTrayImage())
-    tray.setToolTip('Tether')
+    tray.setToolTip('Open WebUI Tether')
     tray.on('click', showMainWindow)
   }
   tray.setContextMenu(

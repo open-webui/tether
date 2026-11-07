@@ -1,5 +1,6 @@
 import { request as httpRequest, type ClientRequest } from 'node:http'
 import { once } from 'node:events'
+import { connect } from 'node:net'
 import WebSocket from 'ws'
 import type { Sessions } from './sessions'
 import { endpoint, type Connection } from '../shared/connections'
@@ -43,6 +44,7 @@ function decode(packet: Buffer): { header: Packet; data: Buffer } {
 
 export interface RelayDestination {
   url: string
+  socketPath?: string
   headers?: Record<string, string>
   firstMessage?: (data: Buffer, kind: string) => Buffer
 }
@@ -379,27 +381,31 @@ export class Relay {
       const method = String(header.method).toUpperCase()
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method))
         throw new Error('Invalid method')
-      const request = httpRequest(url, { method, headers }, (response) => {
-        void (async () => {
-          const responseHeaders = Object.fromEntries(
-            Object.entries(response.headers).filter(
-              ([key]) => !/^(set-cookie|connection|transfer-encoding)$/i.test(key)
+      const request = httpRequest(
+        url,
+        { method, headers, socketPath: destination.socketPath, agent: false },
+        (response) => {
+          void (async () => {
+            const responseHeaders = Object.fromEntries(
+              Object.entries(response.headers).filter(
+                ([key]) => !/^(set-cookie|connection|transfer-encoding)$/i.test(key)
+              )
             )
-          )
-          await this.send(header.stream, 'http-response', {
-            status: response.statusCode,
-            headers: responseHeaders
+            await this.send(header.stream, 'http-response', {
+              status: response.statusCode,
+              headers: responseHeaders
+            })
+            for await (const chunk of response) await this.chunks(header.stream, Buffer.from(chunk))
+            await this.send(header.stream, 'end')
+            this.closeStream(header.stream)
+          })().catch(async () => {
+            await this.send(header.stream, 'error', {
+              message: 'Local response interrupted.'
+            }).catch(() => {})
+            this.closeStream(header.stream)
           })
-          for await (const chunk of response) await this.chunks(header.stream, Buffer.from(chunk))
-          await this.send(header.stream, 'end')
-          this.closeStream(header.stream)
-        })().catch(async () => {
-          await this.send(header.stream, 'error', { message: 'Local response interrupted.' }).catch(
-            () => {}
-          )
-          this.closeStream(header.stream)
-        })
-      })
+        }
+      )
       stream.request = request
       request.on('error', () => {
         void this.send(header.stream, 'error', { message: 'Local request failed.' })
@@ -410,6 +416,9 @@ export class Relay {
     } else {
       url.protocol = 'ws:'
       const socket = new WebSocket(url, {
+        ...(destination.socketPath
+          ? { createConnection: () => connect(destination.socketPath!) }
+          : {}),
         headers,
         maxPayload: MAX_MESSAGE,
         handshakeTimeout: 10000,
