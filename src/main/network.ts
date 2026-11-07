@@ -91,11 +91,7 @@ export async function validateConnection(connection: Connection): Promise<Connec
       if (!rejected) throw error
       const { certificate, error: verification } = rejected
       const hostname = new URL(candidate.url).hostname.replace(/^\[|\]$/g, '')
-      if (
-        attempt ||
-        ![0, -202].includes(verification) ||
-        !validCertificate(certificate, hostname)
-      )
+      if (attempt || ![0, -202].includes(verification) || !validCertificate(certificate, hostname))
         throw new Error('WebUI certificate is invalid or changed. Check its hostname and expiry.')
       const { response } = await dialog.showMessageBox({
         type: 'warning',
