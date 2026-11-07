@@ -1,0 +1,41 @@
+name: Format issue title
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  issues: write
+
+concurrency:
+  group: issue-title-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            // Read the current issue so queued runs do not restore an older title or body.
+            const { data: issue } = await github.rest.issues.get(context.issue)
+            const sections = (issue.body || '').replace(/\r\n/g, '\n').split(/^### /m)
+            const field = (label) => {
+              const section = sections.slice(1).find((value) => value.startsWith(`${label}\n`))
+              return section?.slice(label.length + 1).trim() || ''
+            }
+            const version = field('Version')
+            const platform = field('Platform')
+            // Older issues and API-created issues may not contain the form fields.
+            if ([version, platform].some((value) => !value || value === '_No response_' || /[\[\]\r\n]/.test(value))) {
+              core.info('Skipping issue without valid Version and Platform fields.')
+              return
+            }
+
+            const summary = issue.title.replace(/^(?:\[[^\]\r\n]+\]\s*\[[^\]\r\n]+\]\s*)+/, '').trim()
+            if (!summary) return
+            const title = `[${version}] [${platform}] ${summary}`
+            if (title !== issue.title) {
+              await github.rest.issues.update({ ...context.issue, title })
+            }
