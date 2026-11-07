@@ -3,6 +3,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
+  net,
   Notification,
   session,
   shell,
@@ -27,6 +28,7 @@ import { ManagedService } from './process/managedService'
 import { spawnPty } from './process/nativePty'
 import { attachTerminal } from './process/terminalChannel'
 import { Sessions } from './sessions'
+import { fetchConnection } from './network'
 import { OpenTerminal, type TerminalHandle } from './terminal'
 import { Relay } from './relay'
 import { Store } from './store'
@@ -392,7 +394,7 @@ export class Connections {
         ) {
           throw new Error('Invalid connection')
         }
-        const url = await validateConnectionURL(input.url)
+        const url = await validateConnectionURL(input.url, fetchConnection)
         const connection = { id: randomUUID(), name: input.name.trim() || new URL(url).host, url }
         this.store.connections.push(connection)
         await this.store.saveConfig()
@@ -419,7 +421,7 @@ export class Connections {
           input.name.length > 100
         )
           throw new Error('Invalid connection')
-        const url = await validateConnectionURL(input.url)
+        const url = await validateConnectionURL(input.url, fetchConnection)
         if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
         const previous = { ...connection }
         if (url !== connection.url) await this.clearConnection(id)
@@ -743,17 +745,15 @@ export class Connections {
   private layout(): void {
     if (!this.window) return
     const [width, height] = this.window.getContentSize()
-    const titlebarHeight = process.platform === 'darwin' ? 28 : 32
+    const zoom = this.window.webContents.getZoomFactor()
+    const titlebarHeight = Math.ceil((process.platform === 'darwin' ? 28 : 32) * zoom)
     for (const [id, view] of this.views) {
       view.setVisible(id === this.store.selected && !this.settingsOpen)
       view.setBounds({
         x: 0,
         y: titlebarHeight,
         width,
-        height: Math.max(
-          0,
-          height - titlebarHeight - 24 - Math.min(this.terminalHeight, Math.max(0, height - 160))
-        )
+        height: Math.max(0, height - titlebarHeight - Math.ceil((24 + this.terminalHeight) * zoom))
       })
     }
   }
@@ -933,8 +933,9 @@ export class Connections {
         if (this.local.get(id) === entry) this.local.delete(id)
         return
       }
-      const response = await fetch(endpoint(connection.url, 'api/config'), {
+      const response = await net.fetch(endpoint(connection.url, 'api/config'), {
         headers: { Authorization: 'Bearer ' + access.token },
+        credentials: 'omit',
         redirect: 'error',
         signal: AbortSignal.timeout(15000)
       })

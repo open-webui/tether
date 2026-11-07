@@ -80,6 +80,8 @@
   }
 
   $effect(() => {
+    // Zoom resizes the viewport even when the terminal height stays the same.
+    void viewportHeight
     void window.api.setTerminalHeight(terminalOpen ? dockHeight : 0).catch((cause) => {
       error = String(cause)
     })

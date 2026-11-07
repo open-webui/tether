@@ -1,4 +1,4 @@
-import { shell } from 'electron'
+import { net, shell } from 'electron'
 import { createServer } from 'node:http'
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { endpoint, type AccessToken, type Connection } from '../shared/connections'
@@ -45,8 +45,9 @@ export class Sessions {
     body?: unknown,
     method?: string
   ): Promise<T> {
-    const response = await fetch(endpoint(this.connection(id).url, path), {
+    const response = await net.fetch(endpoint(this.connection(id).url, path), {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
+      credentials: 'omit',
       headers: {
         ...(token ? { Authorization: 'Bearer ' + token } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
