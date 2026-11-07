@@ -19,6 +19,7 @@ import { stat } from 'node:fs/promises'
 import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import log from 'electron-log'
 import icon from '../../resources/icon.png?asset'
+import trayIcon from '../../resources/tray.png?asset'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -428,6 +429,15 @@ function createMenus(): void {
   updateTray()
 }
 
+function createTrayImage(): Electron.NativeImage {
+  if (process.platform !== 'darwin') {
+    return nativeImage.createFromPath(icon).resize({ width: 16, height: 16 })
+  }
+  const image = nativeImage.createFromPath(trayIcon)
+  image.setTemplateImage(true)
+  return image
+}
+
 function updateTray(): void {
   if (process.platform === 'darwin' && !connections.store.general.showMenuBarIcon) {
     tray?.destroy()
@@ -435,7 +445,7 @@ function updateTray(): void {
     return
   }
   if (tray) return
-  tray = new Tray(nativeImage.createFromPath(icon).resize({ width: 16, height: 16 }))
+  tray = new Tray(createTrayImage())
   tray.setToolTip('Tether')
   tray.setContextMenu(
     Menu.buildFromTemplate([
