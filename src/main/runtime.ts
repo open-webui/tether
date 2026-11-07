@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { app } from 'electron'
 import log from 'electron-log'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
@@ -148,7 +149,7 @@ export class Runtime {
         try {
           await this.execute(['-m', 'uv', '--version'])
         } catch {
-          status('Installing uv package manager…')
+          status(t('runtime.installingUv'))
           await this.runInstaller(['-m', 'pip', 'install', 'uv'], status)
         }
       })().catch((error) => {
@@ -254,7 +255,7 @@ export class Runtime {
     const staging = join(this.root, 'node.' + randomUUID())
     await mkdir(staging, { recursive: true })
     try {
-      status('Downloading Node.js')
+      status(t('runtime.downloadingNode'))
       await this.download(
         `https://nodejs.org/dist/v${nodeVersion}/${filename}${extension}`,
         archive,
@@ -316,7 +317,7 @@ export class Runtime {
     await mkdir(this.root, { recursive: true })
     const archive = join(this.root, 'python.' + randomUUID() + '.tar.gz')
     try {
-      status('Downloading Python')
+      status(t('runtime.downloadingPython'))
       await this.download(
         'https://github.com/astral-sh/python-build-standalone/releases/download/20260310/cpython-3.12.13+20260310-' +
           target +

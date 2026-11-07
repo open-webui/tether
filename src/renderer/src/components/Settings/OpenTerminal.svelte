@@ -53,10 +53,18 @@
   let error = $state('')
   let saving: Promise<void> = Promise.resolve()
   const busy = $derived(runtime.busy || installing || uninstalling || restarting || !loaded)
-  const capabilities = [
-    { name: 'OPEN_TERMINAL_ENABLE_BROWSER', label: 'browserAccess' },
-    { name: 'OPEN_TERMINAL_ENABLE_DESKTOP', label: 'desktopAccess' }
-  ]
+  const capabilities = $derived([
+    {
+      name: 'OPEN_TERMINAL_ENABLE_BROWSER',
+      label: $i18n.t('settings.terminal.browserAccess'),
+      description: $i18n.t('settings.terminal.browserAccessDesc')
+    },
+    {
+      name: 'OPEN_TERMINAL_ENABLE_DESKTOP',
+      label: $i18n.t('settings.terminal.desktopAccess'),
+      description: $i18n.t('settings.terminal.desktopAccessDesc')
+    }
+  ])
   const browserMode = $derived(envValue('OPEN_TERMINAL_BROWSER_MODE', 'managed').toLowerCase())
   const fileRoot = $derived(envValue('OPEN_TERMINAL_FILE_BROWSER_ROOT', 'home').trim())
   const fileRootMode = $derived(
@@ -290,12 +298,12 @@
     {#each capabilities as capability (capability.name)}
       <div class="setting-row">
         <div>
-          <div class="setting-label">{$i18n.t(`settings.terminal.${capability.label}`)}</div>
-          <p class="setting-description">{$i18n.t(`settings.terminal.${capability.label}Desc`)}</p>
+          <div class="setting-label">{capability.label}</div>
+          <p class="setting-description">{capability.description}</p>
         </div>
         <Switch
           checked={envEnabled(capability.name)}
-          label={$i18n.t(`settings.terminal.${capability.label}`)}
+          label={capability.label}
           disabled={busy}
           onchange={(value) => setEnv(capability.name, String(value))}
         />

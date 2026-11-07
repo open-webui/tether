@@ -1,3 +1,4 @@
+import { t, setLanguage } from './i18n'
 import {
   app,
   desktopCapturer,
@@ -162,6 +163,7 @@ export class Connections {
 
   async initialize(): Promise<void> {
     await this.store.load()
+    await setLanguage(this.store.general.language || app.getLocale())
     void this.startLocalTerminal()
     this.sessions.start()
     for (const id of Object.keys(this.store.credentials)) void this.ensureLocal(id)
@@ -193,7 +195,7 @@ export class Connections {
         local?.relay?.connected && local.handle?.service.info.status === 'started'
       ),
       title: this.settingsOpen
-        ? 'Settings'
+        ? t('settings.title')
         : (selected && this.titles.get(selected.id)) || selected?.name || 'Tether',
       errors: this.errors,
       persistentCredentials: this.store.persistentCredentials
@@ -772,9 +774,9 @@ export class Connections {
     if (!this.window || this.stopped || this.updatingRuntime) return
     const { response } = await dialog.showMessageBox(this.window, {
       type: 'question',
-      message: 'Install or update Open Terminal?',
-      detail: 'Install Open Terminal to enable local capabilities in Open WebUI.',
-      buttons: ['Cancel', 'Install'],
+      message: t('dialogs.installConfirm'),
+      detail: t('dialogs.installDetails'),
+      buttons: [t('common.cancel'), t('common.install')],
       defaultId: 0,
       cancelId: 0
     })
@@ -808,10 +810,9 @@ export class Connections {
     if (!this.window || this.stopped || this.updatingRuntime) return
     const { response } = await dialog.showMessageBox(this.window, {
       type: 'question',
-      message: 'Uninstall Open Terminal?',
-      detail:
-        'This stops local terminals, disables local access and removes the Open Terminal package. Your files, saved WebUI connections and shared Python runtime are kept.',
-      buttons: ['Cancel', 'Uninstall'],
+      message: t('dialogs.uninstallConfirm'),
+      detail: t('dialogs.uninstallDetails'),
+      buttons: [t('common.cancel'), t('common.uninstall')],
       defaultId: 0,
       cancelId: 0
     })

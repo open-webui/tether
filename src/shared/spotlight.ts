@@ -2,6 +2,7 @@ import type { Connection } from './connections'
 import type { TetherEvent } from './events'
 
 export interface SpotlightInit {
+  language: string
   connections: Connection[]
   selected: string | null
   width: number

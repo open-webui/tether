@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { clipboard, Menu, shell, type WebContents } from 'electron'
 
 export function attachContextMenu(contents: WebContents): void {
@@ -18,11 +19,11 @@ export function attachContextMenu(contents: WebContents): void {
     // Link handling
     if (/^https?:\/\//i.test(params.linkURL)) {
       menuItems.push({
-        label: 'Open Link in Browser',
+        label: t('menu.openLink'),
         click: () => void shell.openExternal(params.linkURL).catch(() => {})
       })
       menuItems.push({
-        label: 'Copy Link',
+        label: t('menu.copyLink'),
         click: () => void clipboard.writeText(params.linkURL).catch(() => {})
       })
       menuItems.push({ type: 'separator' })
@@ -31,14 +32,18 @@ export function attachContextMenu(contents: WebContents): void {
     // Keep edits in the clicked view, even if another connection gains focus.
     if (params.isEditable) {
       menuItems.push(
-        { label: 'Undo', click: () => contents.undo(), enabled: params.editFlags.canUndo },
-        { label: 'Redo', click: () => contents.redo(), enabled: params.editFlags.canRedo },
+        { label: t('menu.undo'), click: () => contents.undo(), enabled: params.editFlags.canUndo },
+        { label: t('menu.redo'), click: () => contents.redo(), enabled: params.editFlags.canRedo },
         { type: 'separator' },
-        { label: 'Cut', click: () => contents.cut(), enabled: params.editFlags.canCut },
-        { label: 'Copy', click: () => contents.copy(), enabled: params.editFlags.canCopy },
-        { label: 'Paste', click: () => contents.paste(), enabled: params.editFlags.canPaste },
+        { label: t('menu.cut'), click: () => contents.cut(), enabled: params.editFlags.canCut },
+        { label: t('menu.copy'), click: () => contents.copy(), enabled: params.editFlags.canCopy },
         {
-          label: 'Select All',
+          label: t('menu.paste'),
+          click: () => contents.paste(),
+          enabled: params.editFlags.canPaste
+        },
+        {
+          label: t('menu.selectAll'),
           click: () => contents.selectAll(),
           enabled: params.editFlags.canSelectAll
         }
@@ -46,7 +51,7 @@ export function attachContextMenu(contents: WebContents): void {
     } else if (params.selectionText) {
       // Non-editable text selection
       menuItems.push({
-        label: 'Copy',
+        label: t('menu.copy'),
         click: () => contents.copy(),
         enabled: params.editFlags.canCopy
       })
@@ -58,12 +63,12 @@ export function attachContextMenu(contents: WebContents): void {
       }
       menuItems.push(
         {
-          label: 'Copy Image',
+          label: t('menu.copyImage'),
           enabled: params.hasImageContents,
           click: () => contents.copyImageAt(params.x, params.y)
         },
         {
-          label: 'Save Image As…',
+          label: t('menu.saveImage'),
           enabled: !!params.srcURL,
           click: () => contents.downloadURL(params.srcURL)
         }

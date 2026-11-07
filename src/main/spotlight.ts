@@ -1,4 +1,5 @@
 import {
+  app,
   BrowserWindow,
   clipboard,
   desktopCapturer,
@@ -148,6 +149,7 @@ export class Spotlight {
     window.setBounds(this.display.bounds)
     const store = this.connections.store
     const init: SpotlightInit = {
+      language: store.general.language || app.getLocale(),
       connections: store.connections,
       selected: store.selected,
       width: this.display.bounds.width,

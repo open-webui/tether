@@ -1,3 +1,4 @@
+import { t, setLanguage } from './i18n'
 import {
   app,
   BrowserWindow,
@@ -268,6 +269,10 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
       if (registeredShortcuts[key]) globalShortcut.unregister(registeredShortcuts[key])
       registeredShortcuts[key] = next[key]
     }
+    if (next.language !== previous.language) {
+      await setLanguage(next.language || app.getLocale())
+      createMenus()
+    }
     nativeTheme.themeSource = next.theme
     if (next.automaticUpdates !== previous.automaticUpdates)
       setAutomaticUpdates(next.automaticUpdates)
@@ -302,10 +307,9 @@ function registerIPC(): void {
     try {
       const { response } = await dialog.showMessageBox(mainWindow, {
         type: 'warning',
-        message: 'Factory reset?',
-        detail:
-          'This will remove Tether’s installed runtimes and packages, settings, saved connections, and local sign-in data. Tether will restart. Your hosted WebUI data and personal files will not be deleted.',
-        buttons: ['Cancel', 'Reset'],
+        message: t('dialogs.resetConfirm'),
+        detail: t('dialogs.resetDetails'),
+        buttons: [t('common.cancel'), t('common.reset')],
         defaultId: 0,
         cancelId: 0
       })
@@ -372,16 +376,23 @@ function registerIPC(): void {
 }
 
 function createMenus(): void {
+  app.setAboutPanelOptions({
+    applicationName: 'Tether',
+    applicationVersion: app.getVersion(),
+    copyright: t('settings.about.copyright', { year: new Date().getFullYear() }),
+    website: 'https://github.com/open-webui/tether',
+    iconPath: icon
+  })
   const checkUpdates = (): void => {
     showMainWindow()
     void checkForUpdates()
   }
-  const updateItem = { label: 'Check for Updates…', click: checkUpdates }
+  const updateItem = { label: t('settings.about.checkUpdates'), click: checkUpdates }
   const template: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'Tether',
       submenu: [
-        { label: 'About Tether', click: () => app.showAboutPanel() },
+        { label: t('settings.about.title'), click: () => app.showAboutPanel() },
         updateItem,
         { type: 'separator' },
         ...(process.platform === 'darwin'
@@ -400,10 +411,10 @@ function createMenus(): void {
     { role: 'editMenu' },
     { role: 'viewMenu' },
     {
-      label: 'Window',
+      label: t('menu.window'),
       submenu: [
-        { label: 'Show Tether', click: showMainWindow },
-        { label: 'Open Spotlight', click: openSpotlight },
+        { label: t('menu.show'), click: showMainWindow },
+        { label: t('settings.general.openSpotlight'), click: openSpotlight },
         { role: 'minimize' },
         { role: 'close' }
       ]
@@ -412,11 +423,11 @@ function createMenus(): void {
       role: 'help',
       submenu: [
         {
-          label: 'Tether on GitHub',
+          label: t('menu.github'),
           click: () => openExternal('https://github.com/open-webui/tether')
         },
         {
-          label: 'Open Logs',
+          label: t('menu.logs'),
           click: () => {
             void shell.openPath(app.getPath('logs'))
           }
@@ -444,25 +455,26 @@ function updateTray(): void {
     tray = null
     return
   }
-  if (tray) return
-  tray = new Tray(createTrayImage())
-  tray.setToolTip('Tether')
+  if (!tray) {
+    tray = new Tray(createTrayImage())
+    tray.setToolTip('Tether')
+    tray.on('click', showMainWindow)
+  }
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: 'Show Tether', click: showMainWindow },
-      { label: 'Open Spotlight', click: openSpotlight },
+      { label: t('menu.show'), click: showMainWindow },
+      { label: t('settings.general.openSpotlight'), click: openSpotlight },
       {
-        label: 'Check for Updates…',
+        label: t('settings.about.checkUpdates'),
         click: () => {
           showMainWindow()
           void checkForUpdates()
         }
       },
       { type: 'separator' },
-      { label: 'Quit Tether', click: () => app.quit() }
+      { label: t('menu.quit'), click: () => app.quit() }
     ])
   )
-  tray.on('click', showMainWindow)
 }
 
 function registerShortcut(accelerator: string, callback: () => void): void {
@@ -525,13 +537,6 @@ if (!app.requestSingleInstanceLock()) {
     .then(async () => {
       electronApp.setAppUserModelId('com.openwebui.tether')
       app.dock?.setIcon(icon)
-      app.setAboutPanelOptions({
-        applicationName: 'Tether',
-        applicationVersion: app.getVersion(),
-        copyright: `Copyright © ${new Date().getFullYear()} Open WebUI Inc.`,
-        website: 'https://github.com/open-webui/tether',
-        iconPath: icon
-      })
       await connections.initialize()
       nativeTheme.themeSource = connections.store.general.theme
       spotlight.initialize()
@@ -545,7 +550,7 @@ if (!app.requestSingleInstanceLock()) {
           log.warn(error)
           if (Notification.isSupported())
             new Notification({
-              title: 'Tether shortcut',
+              title: t('menu.shortcut'),
               body: String(error).replace(/^Error: /, '')
             }).show()
         }
