@@ -79,10 +79,10 @@
   }}
 >
   <div
-    class="w-full h-[calc(100dvh-64px)] max-h-[calc(100dvh-64px)] rounded-[32px] overflow-hidden shadow-2xl"
+    class="settings-panel w-full h-[calc(100dvh-64px)] max-h-[calc(100dvh-64px)] rounded-[32px] overflow-hidden shadow-2xl"
   >
     <div
-      class="flex h-full w-full min-h-0 flex-col bg-white text-[12px] leading-[16px] text-[oklch(0.2_0_0)] md:flex-row dark:bg-[oklch(0.2_0_0)] dark:text-[oklch(0.85_0_0)] dark:[color-scheme:dark] [&_:is(button,input,select,textarea):focus-visible]:outline-2 [&_:is(button,input,select,textarea):focus-visible]:outline-offset-2 [&_:is(button,input,select,textarea):focus-visible]:outline-blue-500 motion-reduce:[&_*]:transition-none motion-reduce:[&_*]:animate-none"
+      class="settings-layout flex h-full w-full min-h-0 flex-col bg-white text-[12px] leading-[16px] text-[oklch(0.2_0_0)] md:flex-row dark:bg-[oklch(0.2_0_0)] dark:text-[oklch(0.85_0_0)] dark:[color-scheme:dark] [&_:is(button,input,select,textarea):focus-visible]:outline-2 [&_:is(button,input,select,textarea):focus-visible]:outline-offset-2 [&_:is(button,input,select,textarea):focus-visible]:outline-blue-500 motion-reduce:[&_*]:transition-none motion-reduce:[&_*]:animate-none"
       in:fade={{ duration: 150 }}
     >
       <nav
@@ -220,6 +220,16 @@
 </dialog>
 
 <style>
+  /* Let navigation scroll too when zoom leaves too little room for the controls. */
+  @media (max-height: 360px) {
+    .settings-panel {
+      overflow-y: auto;
+    }
+    .settings-layout {
+      height: auto;
+      min-height: 100%;
+    }
+  }
   dialog::backdrop {
     background: rgb(0 0 0 / 0.6);
     backdrop-filter: blur(4px);
