@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-11-09
+
+### Added
+
+- **UI scale before sign-in.** Settings → General now includes a UI Scale control from 75% to 200%. It resizes Tether and embedded WebUI pages, including sign-in screens, and remembers your choice across restarts.
+
+### Fixed
+
+- **Automatic terminal connection after upgrading WebUI.** Tether now upgrades saved legacy logins when WebUI gains session support, allowing Open Terminal to connect without a factory reset or removing the connection. Temporary failures keep the saved login and retry automatically.
+
 ## [0.1.10] - 2026-11-08
 
 ### Fixed
