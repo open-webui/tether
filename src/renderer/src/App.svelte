@@ -594,7 +594,11 @@
   {/if}
 </div>
 
-{#if settingsOpen}<Settings bind:settingsTab onClose={() => void toggleSettings(false)} />{/if}
+{#if settingsOpen}<Settings
+    bind:settingsTab
+    terminalStatus={state.terminalStatus}
+    onClose={() => void toggleSettings(false)}
+  />{/if}
 
 <dialog
   bind:this={setupDialog}

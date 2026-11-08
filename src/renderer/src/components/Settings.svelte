@@ -12,11 +12,13 @@
   import General from './Settings/General.svelte'
   import SettingsIcon from 'iconoir/icons/settings.svg?raw'
   import About from './Settings/About.svelte'
+  import type { ServiceStatus } from '../../../shared/terminal'
 
   let {
     onClose,
+    terminalStatus,
     settingsTab = $bindable('general')
-  }: { onClose: () => void; settingsTab?: string } = $props()
+  }: { onClose: () => void; terminalStatus: ServiceStatus; settingsTab?: string } = $props()
   let dialog: HTMLDialogElement
   let search = $state('')
   let showSearch = $state(false)
@@ -206,7 +208,7 @@
             {#if settingsTab === 'general'}
               <General />
             {:else if settingsTab === 'terminal'}
-              <OpenTerminal />
+              <OpenTerminal {terminalStatus} />
             {:else}
               <About />
             {/if}
