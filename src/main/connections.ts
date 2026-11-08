@@ -29,6 +29,7 @@ import { spawnPty } from './process/nativePty'
 import { attachTerminal } from './process/terminalChannel'
 import { Sessions } from './sessions'
 import { connectionSession, validateConnection } from './network'
+import { accessCookies, accessHeaders, isAccessLogin } from './access'
 import { OpenTerminal, type TerminalHandle } from './terminal'
 import { Relay } from './relay'
 import { Store } from './store'
@@ -443,8 +444,23 @@ export class Connections {
         })
         if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
         const previous = { ...connection }
-        if (url !== connection.url || updated.trustedCertificate !== connection.trustedCertificate)
+        if (
+          url !== connection.url ||
+          updated.trustedCertificate !== connection.trustedCertificate
+        ) {
+          // Validation may have just signed in to Access in the profile we are clearing.
+          const cookies = await accessCookies(
+            connectionSession(updated),
+            endpoint(url, 'api/config')
+          )
           await this.clearConnection(id)
+          for (const cookie of cookies)
+            await connectionSession(updated).cookies.set({
+              ...cookie,
+              url: endpoint(url, 'api/config'),
+              domain: cookie.hostOnly ? undefined : cookie.domain
+            })
+        }
         connection.name = input.name.trim() || new URL(url).host
         connection.url = url
         connection.trustedCertificate = updated.trustedCertificate
@@ -660,6 +676,7 @@ export class Connections {
       if (this.store.selected === connection.id) this.emit()
     })
     let legacySignIn = false
+    let accessSignIn = false
     let signingIn = false
     const oauthProvider = (address: string): string | undefined => {
       if (!belongsToConnection(address, connection.url)) return
@@ -686,8 +703,10 @@ export class Connections {
       }
     }
     view.webContents.on('did-navigate', (_event, address) => {
-      if (belongsToConnection(address, connection.url) && !oauthProvider(address))
+      if (belongsToConnection(address, connection.url) && !oauthProvider(address)) {
         legacySignIn = false
+        accessSignIn = false
+      }
     })
     const navigate = (
       event: Electron.Event,
@@ -697,6 +716,7 @@ export class Connections {
       isRedirect = false
     ): void => {
       if (isMainFrame === false) return
+      if (isAccessLogin(address, connection.url)) accessSignIn = true
       if (belongsToConnection(address, connection.url)) {
         const provider = oauthProvider(address)
         if (provider && !legacySignIn) {
@@ -705,6 +725,7 @@ export class Connections {
         }
         return
       }
+      if (accessSignIn && address.startsWith('https://')) return
       if (legacySignIn && /^https?:\/\//i.test(address)) return
       event.preventDefault()
       if (isRedirect) {
@@ -718,16 +739,18 @@ export class Connections {
       navigate(event, address, isInPlace, isMainFrame, true)
     )
     view.webContents.setWindowOpenHandler(({ url, disposition, features }) => {
+      if (isAccessLogin(url, connection.url)) accessSignIn = true
       const provider = oauthProvider(url)
       if (provider && !legacySignIn) {
         void signIn(url, provider)
         return { action: 'deny' }
       }
       if (
-        legacySignIn &&
-        disposition === 'new-window' &&
-        features &&
-        (/^https?:\/\//i.test(url) || url === 'about:blank')
+        (accessSignIn && (url.startsWith('https://') || url === 'about:blank')) ||
+        (legacySignIn &&
+          disposition === 'new-window' &&
+          features &&
+          (/^https?:\/\//i.test(url) || url === 'about:blank'))
       ) {
         return {
           action: 'allow',
@@ -964,7 +987,13 @@ export class Connections {
       const response = await connectionSession(connection).fetch(
         endpoint(connection.url, 'api/config'),
         {
-          headers: { Authorization: 'Bearer ' + access.token },
+          headers: {
+            ...(await accessHeaders(
+              connectionSession(connection),
+              endpoint(connection.url, 'api/config')
+            )),
+            Authorization: 'Bearer ' + access.token
+          },
           credentials: 'omit',
           redirect: 'error',
           signal: AbortSignal.timeout(15000)

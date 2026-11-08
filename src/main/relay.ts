@@ -4,7 +4,8 @@ import { connect } from 'node:net'
 import WebSocket from 'ws'
 import type { Sessions } from './sessions'
 import { endpoint, type Connection } from '../shared/connections'
-import { connectionTLS } from './network'
+import { connectionSession, connectionTLS } from './network'
+import { accessHeaders } from './access'
 
 const CHUNK = 64 * 1024
 const WINDOW = 2 * 1024 * 1024
@@ -128,9 +129,12 @@ export class Relay {
       if (!access || !this.sessions.credential(this.connection.id)?.sessionId || this.stopped)
         return
       const url = new URL(endpoint(this.connection.url, 'api/v1/tether/connect'))
+      const headers = await accessHeaders(connectionSession(this.connection), url.href)
+      if (this.stopped) return
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       const socket = new WebSocket(url, {
         ...connectionTLS(this.connection),
+        headers,
         maxPayload: CHUNK + 4100,
         handshakeTimeout: 20000,
         followRedirects: false

@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { checkServerIdentity, type ConnectionOptions } from 'node:tls'
 import { addAbortSignal, Readable } from 'node:stream'
 import { normalizeURL, validateConnectionURL, type Connection } from '../shared/connections'
+import { accessHeaders, isAccessLogin, signInToAccess } from './access'
 
 function validCertificate(certificate: X509Certificate, hostname: string): boolean {
   return (
@@ -75,7 +76,7 @@ export function connectionTLS(connection: Connection): ConnectionOptions {
 
 export async function validateConnection(connection: Connection): Promise<Connection> {
   const candidate = { ...connection, url: normalizeURL(connection.url.trim()) }
-  // Probe without cookies, and use a fresh verifier after approval (Chromium caches verdicts).
+  // Keep WebUI credentials out of probes; a fresh verifier avoids cached certificate verdicts.
   for (let attempt = 0; attempt < 2; attempt++) {
     const profile = session.fromPartition('validate-' + randomUUID(), { cache: false })
     let rejected: { certificate: X509Certificate; error: number } | undefined
@@ -83,9 +84,30 @@ export async function validateConnection(connection: Connection): Promise<Connec
       rejected = { certificate, error }
     })
     try {
-      await validateConnectionURL(candidate.url, (url, options) =>
-        fetchConnection(url, options, profile)
-      )
+      let login: string | undefined
+      const validate = async (): Promise<void> => {
+        await validateConnectionURL(candidate.url, async (url, options) => {
+          const response = await fetchConnection(
+            url,
+            {
+              ...options,
+              headers: await accessHeaders(connectionSession(candidate), url)
+            },
+            profile
+          )
+          const location = response.headers.get('location')
+          if (location && isAccessLogin(new URL(location, url).href, candidate.url))
+            login = new URL(location, url).href
+          return response
+        })
+      }
+      try {
+        await validate()
+      } catch (error) {
+        if (!login) throw error
+        await signInToAccess(candidate, connectionSession(candidate), login)
+        await validate()
+      }
       return candidate
     } catch (error) {
       if (!rejected) throw error
@@ -116,12 +138,13 @@ export async function validateConnection(connection: Connection): Promise<Connec
 // net.fetch rejects manual redirects; validation needs their status and location.
 export function fetchConnection(
   url: string,
-  { signal }: RequestInit,
+  { signal, headers }: RequestInit,
   profile: Session
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
     signal?.throwIfAborted()
     const request = net.request({ url, session: profile, redirect: 'manual', credentials: 'omit' })
+    new Headers(headers).forEach((value, name) => request.setHeader(name, value))
     const abort = (): void => {
       reject(signal?.reason)
       request.abort()

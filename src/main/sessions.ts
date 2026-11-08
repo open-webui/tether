@@ -4,6 +4,7 @@ import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypt
 import { endpoint, type AccessToken, type Connection } from '../shared/connections'
 import { Store, type Credential } from './store'
 import { connectionSession } from './network'
+import { accessHeaders } from './access'
 
 interface SessionResponse {
   session_id: string
@@ -51,6 +52,7 @@ export class Sessions {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
       credentials: 'omit',
       headers: {
+        ...(await accessHeaders(connectionSession(connection), endpoint(connection.url, path))),
         ...(token ? { Authorization: 'Bearer ' + token } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
       },
@@ -221,7 +223,12 @@ export class Sessions {
     this.unchanged(id, version)
     if (!Object.hasOwn(config.oauth?.providers ?? {}, provider))
       throw new Error('This WebUI does not support this sign-in provider.')
-    if (!config.features?.auth_sessions) return false
+    if (
+      !config.features?.auth_sessions ||
+      (await accessHeaders(connectionSession(connection), endpoint(connection.url, 'api/config')))
+        .Cookie
+    )
+      return false
     const verifier = randomBytes(32).toString('base64url')
     const state = randomBytes(32).toString('base64url')
     const path = '/callback/' + randomBytes(24).toString('base64url')
