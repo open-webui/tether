@@ -101,7 +101,8 @@ export class OpenTerminal {
   }
 
   credentials(id: string | null): { url: string; apiKey: string } {
-    const handle = this.handles.get(id)
+    const status = this.services.get(id)?.info.status
+    const handle = this.handles.get(!status || status === 'stopped' ? null : id)
     if (
       !this.getConfig().httpEnabled ||
       !handle?.httpUrl ||

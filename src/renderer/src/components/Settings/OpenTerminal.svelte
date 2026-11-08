@@ -3,9 +3,11 @@
   import i18n from '../../lib/i18n'
   import { onMount } from 'svelte'
   import { parseLocalServerConfig, type RuntimeState } from '../../../../shared/config'
+  import type { ServiceStatus } from '../../../../shared/terminal'
   import NavArrowDownIcon from 'iconoir/icons/nav-arrow-down.svg?raw'
 
   const id = $props.id()
+  let { terminalStatus }: { terminalStatus: ServiceStatus } = $props()
   // Suggestions only; arbitrary variable names and values remain editable.
   const suggestions: Record<string, string[]> = {
     OPEN_TERMINAL_ENABLE_TERMINAL: ['true', 'false'],
@@ -463,7 +465,11 @@
       {#if httpHost === '0.0.0.0'}
         <p class="setting-description">{$i18n.t('settings.terminal.httpNetworkDesc')}</p>
       {/if}
-      <button class="env-action mt-2" disabled={busy || !enabled} onclick={copyCredentials}>
+      <button
+        class="env-action mt-2"
+        disabled={busy || !enabled || terminalStatus !== 'started'}
+        onclick={copyCredentials}
+      >
         {accessCopied ? $i18n.t('logs.copied') : $i18n.t('settings.terminal.copyCredentials')}
       </button>
       <p class="setting-description">{$i18n.t('settings.terminal.httpCredentialsDesc')}</p>
