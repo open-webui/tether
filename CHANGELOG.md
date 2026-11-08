@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-11-08
+
+### Fixed
+
+- **Copying Open Terminal's address and key.** With **Allow HTTP access** enabled, **Copy URL and API key** now works when the bottom panel is showing the standalone local terminal because the selected WebUI connection has no running terminal of its own. Previously, the panel could show a working address while Copy reported **HTTP access is not running for this connection**. The button also stays disabled while Open Terminal starts or restarts and becomes available once it is running.
 ## [0.1.9] - 2026-11-08
 
 ### Added
