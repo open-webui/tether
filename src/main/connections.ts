@@ -5,9 +5,7 @@ import {
   desktopCapturer,
   dialog,
   ipcMain,
-  net,
   Notification,
-  session,
   shell,
   WebContentsView,
   type BrowserWindow,
@@ -19,7 +17,7 @@ import {
   belongsToConnection,
   connectionRedirectError,
   endpoint,
-  validateConnectionURL,
+  normalizeURL,
   type AccessToken,
   type Connection,
   type ConnectionState
@@ -30,7 +28,8 @@ import { ManagedService } from './process/managedService'
 import { spawnPty } from './process/nativePty'
 import { attachTerminal } from './process/terminalChannel'
 import { Sessions } from './sessions'
-import { fetchConnection } from './network'
+import { connectionSession, validateConnection } from './network'
+import { accessCookies, accessHeaders, isAccessLogin } from './access'
 import { OpenTerminal, type TerminalHandle } from './terminal'
 import { Relay } from './relay'
 import { Store } from './store'
@@ -407,8 +406,11 @@ export class Connections {
         ) {
           throw new Error('Invalid connection')
         }
-        const url = await validateConnectionURL(input.url, fetchConnection)
-        const connection = { id: randomUUID(), name: input.name.trim() || new URL(url).host, url }
+        const connection = await validateConnection({
+          id: randomUUID(),
+          name: input.name.trim() || new URL(input.url.trim()).host,
+          url: input.url
+        })
         this.store.connections.push(connection)
         await this.store.saveConfig()
         await this.select(connection.id)
@@ -434,12 +436,34 @@ export class Connections {
           input.name.length > 100
         )
           throw new Error('Invalid connection')
-        const url = await validateConnectionURL(input.url, fetchConnection)
+        const url = normalizeURL(input.url.trim())
+        const updated = await validateConnection({
+          ...connection,
+          url,
+          trustedCertificate: url === connection.url ? connection.trustedCertificate : undefined
+        })
         if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
         const previous = { ...connection }
-        if (url !== connection.url) await this.clearConnection(id)
+        if (
+          url !== connection.url ||
+          updated.trustedCertificate !== connection.trustedCertificate
+        ) {
+          // Validation may have just signed in to Access in the profile we are clearing.
+          const cookies = await accessCookies(
+            connectionSession(updated),
+            endpoint(url, 'api/config')
+          )
+          await this.clearConnection(id)
+          for (const cookie of cookies)
+            await connectionSession(updated).cookies.set({
+              ...cookie,
+              url: endpoint(url, 'api/config'),
+              domain: cookie.hostOnly ? undefined : cookie.domain
+            })
+        }
         connection.name = input.name.trim() || new URL(url).host
         connection.url = url
+        connection.trustedCertificate = updated.trustedCertificate
         try {
           await this.store.saveConfig()
         } catch (error) {
@@ -536,7 +560,8 @@ export class Connections {
       this.pendingEvent.finish('This connection changed. Select a saved connection and try again.')
     const view = this.views.get(id)
     const profile =
-      view?.webContents.session ?? session.fromPath(join(app.getPath('userData'), 'profiles', id))
+      view?.webContents.session ??
+      connectionSession(this.store.connections.find((item) => item.id === id)!)
     if (view) {
       this.views.delete(id)
       this.window?.contentView.removeChildView(view)
@@ -544,6 +569,7 @@ export class Connections {
     }
     // Revoke against the old address before changing the saved connection.
     await this.sessions.signedOut(id)
+    await profile.closeAllConnections()
     await profile.clearStorageData()
     await profile.clearCache()
     await this.terminal.remove(id)
@@ -571,7 +597,7 @@ export class Connections {
   private createView(connection: Connection, path?: string): void {
     const view = new WebContentsView({
       webPreferences: {
-        session: session.fromPath(join(app.getPath('userData'), 'profiles', connection.id)),
+        session: connectionSession(connection),
         preload: join(__dirname, '../preload/guest.js'),
         additionalArguments: ['--tether-connection-url=' + connection.url],
         sandbox: true,
@@ -650,6 +676,7 @@ export class Connections {
       if (this.store.selected === connection.id) this.emit()
     })
     let legacySignIn = false
+    let accessSignIn = false
     let signingIn = false
     const oauthProvider = (address: string): string | undefined => {
       if (!belongsToConnection(address, connection.url)) return
@@ -676,8 +703,10 @@ export class Connections {
       }
     }
     view.webContents.on('did-navigate', (_event, address) => {
-      if (belongsToConnection(address, connection.url) && !oauthProvider(address))
+      if (belongsToConnection(address, connection.url) && !oauthProvider(address)) {
         legacySignIn = false
+        accessSignIn = false
+      }
     })
     const navigate = (
       event: Electron.Event,
@@ -687,6 +716,7 @@ export class Connections {
       isRedirect = false
     ): void => {
       if (isMainFrame === false) return
+      if (isAccessLogin(address, connection.url)) accessSignIn = true
       if (belongsToConnection(address, connection.url)) {
         const provider = oauthProvider(address)
         if (provider && !legacySignIn) {
@@ -695,6 +725,7 @@ export class Connections {
         }
         return
       }
+      if (accessSignIn && address.startsWith('https://')) return
       if (legacySignIn && /^https?:\/\//i.test(address)) return
       event.preventDefault()
       if (isRedirect) {
@@ -708,16 +739,18 @@ export class Connections {
       navigate(event, address, isInPlace, isMainFrame, true)
     )
     view.webContents.setWindowOpenHandler(({ url, disposition, features }) => {
+      if (isAccessLogin(url, connection.url)) accessSignIn = true
       const provider = oauthProvider(url)
       if (provider && !legacySignIn) {
         void signIn(url, provider)
         return { action: 'deny' }
       }
       if (
-        legacySignIn &&
-        disposition === 'new-window' &&
-        features &&
-        (/^https?:\/\//i.test(url) || url === 'about:blank')
+        (accessSignIn && (url.startsWith('https://') || url === 'about:blank')) ||
+        (legacySignIn &&
+          disposition === 'new-window' &&
+          features &&
+          (/^https?:\/\//i.test(url) || url === 'about:blank'))
       ) {
         return {
           action: 'allow',
@@ -743,7 +776,13 @@ export class Connections {
       popup.once('closed', () => view.webContents.removeListener('destroyed', close))
     })
     view.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
-      if (isMainFrame && code !== -3) this.fail(connection.id, description)
+      if (isMainFrame && code !== -3)
+        this.fail(
+          connection.id,
+          code <= -200 && code > -300
+            ? 'WebUI certificate is invalid or changed. Edit the connection to review it.'
+            : description
+        )
     })
     view.webContents.on('render-process-gone', () =>
       this.fail(connection.id, 'WebUI stopped. Select Reload from the View menu.')
@@ -945,12 +984,21 @@ export class Connections {
         if (this.local.get(id) === entry) this.local.delete(id)
         return
       }
-      const response = await net.fetch(endpoint(connection.url, 'api/config'), {
-        headers: { Authorization: 'Bearer ' + access.token },
-        credentials: 'omit',
-        redirect: 'error',
-        signal: AbortSignal.timeout(15000)
-      })
+      const response = await connectionSession(connection).fetch(
+        endpoint(connection.url, 'api/config'),
+        {
+          headers: {
+            ...(await accessHeaders(
+              connectionSession(connection),
+              endpoint(connection.url, 'api/config')
+            )),
+            Authorization: 'Bearer ' + access.token
+          },
+          credentials: 'omit',
+          redirect: 'error',
+          signal: AbortSignal.timeout(15000)
+        }
+      )
       if (!response.ok) throw new Error('Could not reach WebUI.')
       const config = (await response.json()) as { features?: { tether?: boolean } }
       if (this.local.get(id) !== entry || this.stopped) return

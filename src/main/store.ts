@@ -1,7 +1,7 @@
 import { app, safeStorage } from 'electron'
 import { access, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, X509Certificate } from 'node:crypto'
 import { hostname } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -85,7 +85,12 @@ export class Store {
         if (!/^[a-f0-9-]{36}$/i.test(value.id) || typeof value.name !== 'string') {
           throw new Error('Invalid saved connection')
         }
-        return { id: value.id, name: value.name, url: normalizeURL(value.url) }
+        const trustedCertificate = value.trustedCertificate
+        if (trustedCertificate !== undefined) {
+          if (typeof trustedCertificate !== 'string') throw new Error('Invalid saved certificate')
+          new X509Certificate(trustedCertificate)
+        }
+        return { id: value.id, name: value.name, url: normalizeURL(value.url), trustedCertificate }
       })
       if (new Set(this.connections.map((c) => c.id)).size !== this.connections.length) {
         throw new Error('Duplicate connection identifiers')

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-11-08
+
+### Added
+
+- **Approve a certificate for your WebUI server.** When adding or editing a connection whose HTTPS certificate Tether does not recognize, you can now review its details and choose **Trust Certificate**. Tether remembers that approval for this saved connection and uses it when opening WebUI, signing in, and connecting Open Terminal. If the certificate changes, Tether asks you to edit the connection and review it again. Expired certificates and certificates for a different server address remain blocked.
+
+### Fixed
+
+- **Sign-in through Cloudflare Access.** Adding a WebUI address protected by Cloudflare Access now opens its sign-in window inside Tether and checks the address again after you finish. Tether keeps that Access sign-in available when opening WebUI, renewing your WebUI sign-in, and connecting Open Terminal. Cloudflare's sign-in redirects and pop-up windows can now complete instead of being rejected as an address change or stopping with **ERR_ABORTED**.
+
 ## [0.1.8] - 2026-11-07
 
 ### Added
