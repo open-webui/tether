@@ -12,6 +12,7 @@ export interface GeneralConfig {
   language: string
   deviceName: string
   theme: 'system' | 'light' | 'dark'
+  uiScale: number
   automaticUpdates: boolean
   startMinimized: boolean
   runInBackground: boolean
@@ -24,10 +25,13 @@ export interface GeneralConfig {
   windowMaximized: boolean
 }
 
+export const uiScaleOptions = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
+
 export const defaultGeneralConfig: GeneralConfig = {
   language: '',
   deviceName: '',
   theme: 'system',
+  uiScale: 1,
   automaticUpdates: true,
   startMinimized: false,
   runInBackground: true,
@@ -58,6 +62,7 @@ export function parseGeneralConfig(value: unknown): GeneralConfig {
   )
     throw new Error('Invalid language')
   if (!['system', 'light', 'dark'].includes(config.theme)) throw new Error('Invalid appearance')
+  if (!uiScaleOptions.includes(config.uiScale)) throw new Error('Invalid UI scale')
   for (const key of [
     'automaticUpdates',
     'startMinimized',
@@ -93,6 +98,7 @@ export function parseGeneralConfig(value: unknown): GeneralConfig {
     language: config.language,
     deviceName: config.deviceName.trim(),
     theme: config.theme,
+    uiScale: config.uiScale,
     automaticUpdates: config.automaticUpdates,
     startMinimized: config.startMinimized,
     runInBackground: config.runInBackground,

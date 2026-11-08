@@ -5,7 +5,11 @@
   import NavArrowDownIcon from 'iconoir/icons/nav-arrow-down.svg?raw'
   import XmarkIcon from 'iconoir/icons/xmark.svg?raw'
   import Switch from '../common/Switch.svelte'
-  import { defaultGeneralConfig, type GeneralConfig } from '../../../../shared/config'
+  import {
+    defaultGeneralConfig,
+    uiScaleOptions,
+    type GeneralConfig
+  } from '../../../../shared/config'
 
   let config = $state<GeneralConfig>({ ...defaultGeneralConfig })
   let platform = $state('')
@@ -229,6 +233,28 @@
         <option value="system">{$i18n.t('common.auto')}</option><option value="light"
           >{$i18n.t('settings.general.light')}</option
         ><option value="dark">{$i18n.t('settings.general.dark')}</option>
+      </select>
+      <span aria-hidden="true" class="select-chevron inline-flex [&>svg]:size-full"
+        >{@html NavArrowDownIcon}</span
+      >
+    </div>
+  </div>
+  <div class="setting-row">
+    <div>
+      <label class="setting-label" for="ui-scale">{$i18n.t('settings.general.uiScale')}</label>
+      <p class="setting-description">{$i18n.t('settings.general.uiScaleDesc')}</p>
+    </div>
+    <div class="select-wrapper">
+      <select
+        id="ui-scale"
+        class="setting-input"
+        value={config.uiScale}
+        disabled={!loaded || busy}
+        onchange={(event) => save({ uiScale: Number(event.currentTarget.value) })}
+      >
+        {#each uiScaleOptions as scale (scale)}
+          <option value={scale}>{Math.round(scale * 100)}%</option>
+        {/each}
       </select>
       <span aria-hidden="true" class="select-chevron inline-flex [&>svg]:size-full"
         >{@html NavArrowDownIcon}</span

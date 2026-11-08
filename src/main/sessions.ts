@@ -114,7 +114,8 @@ export class Sessions {
     if (typeof token !== 'string' || !token || token.length > 16384)
       throw new Error('Invalid token')
     const existing = this.store.credentials[id]
-    if (existing?.token === token) return { token, expiresAt: existing.expiresAt }
+    if (existing?.token === token && existing.sessionId)
+      return { token, expiresAt: existing.expiresAt }
     const version = this.versions.get(id) ?? 0
     const info = await this.request<{ id: string; role: string; expires_at: number | null }>(
       id,
@@ -158,6 +159,8 @@ export class Sessions {
   private async renew(id: string, force: boolean): Promise<AccessToken | null> {
     const current = this.store.credentials[id]
     if (!current) return null
+    // Logins saved before WebUI supported sessions must be upgraded before the relay can connect.
+    if (!current.sessionId) return this.signedIn(id, current.token)
     const version = this.versions.get(id) ?? 0
     if (
       !force &&

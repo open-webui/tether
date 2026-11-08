@@ -84,6 +84,13 @@ export class Connections {
 
   constructor(private themeChanged: (theme: GeneralConfig['theme']) => Promise<void>) {}
 
+  syncUIScale(): void {
+    const scale = this.store.general.uiScale
+    this.window?.webContents.setZoomFactor(scale)
+    for (const view of this.views.values()) view.webContents.setZoomFactor(scale)
+    this.layout()
+  }
+
   syncTheme(theme: GeneralConfig['theme']): void {
     for (const id of this.views.keys()) {
       this.themes.set(id, theme)
@@ -171,6 +178,7 @@ export class Connections {
 
   attach(window: BrowserWindow): void {
     this.window = window
+    window.webContents.on('did-finish-load', () => this.syncUIScale())
     window.on('resize', () => this.layout())
     window.webContents.on('did-start-loading', () => {
       this.settingsOpen = false
@@ -598,6 +606,7 @@ export class Connections {
     const view = new WebContentsView({
       webPreferences: {
         session: connectionSession(connection),
+        zoomFactor: this.store.general.uiScale,
         preload: join(__dirname, '../preload/guest.js'),
         additionalArguments: ['--tether-connection-url=' + connection.url],
         sandbox: true,
@@ -606,6 +615,9 @@ export class Connections {
       }
     })
     this.views.set(connection.id, view)
+    view.webContents.on('did-finish-load', () => {
+      view.webContents.setZoomFactor(this.store.general.uiScale)
+    })
     // Keep the saved appearance until WebUI confirms it, including on older servers.
     this.pendingThemes.set(connection.id, this.store.general.theme)
     const canLocate = (
@@ -799,6 +811,7 @@ export class Connections {
     const [width, height] = this.window.getContentSize()
     const zoom = this.window.webContents.getZoomFactor()
     const titlebarHeight = Math.ceil((process.platform === 'darwin' ? 28 : 32) * zoom)
+    if (process.platform !== 'darwin') this.window.setTitleBarOverlay({ height: titlebarHeight })
     for (const [id, view] of this.views) {
       view.setVisible(id === this.store.selected && !this.settingsOpen)
       view.setBounds({

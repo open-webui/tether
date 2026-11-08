@@ -115,6 +115,7 @@ function createMainWindow(show = true): void {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      zoomFactor: connections.store.general.uiScale,
       contextIsolation: true,
       nodeIntegration: false,
       backgroundThrottling: false,
@@ -275,6 +276,7 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
       createMenus()
     }
     nativeTheme.themeSource = next.theme
+    if ('uiScale' in patch) connections.syncUIScale()
     if (next.automaticUpdates !== previous.automaticUpdates)
       setAutomaticUpdates(next.automaticUpdates)
     mainWindow?.webContents.send('config:changed', {
