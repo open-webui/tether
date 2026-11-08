@@ -19,7 +19,8 @@ jobs:
         with:
           script: |
             // Read the current issue so queued runs do not restore an older title or body.
-            const { data: issue } = await github.rest.issues.get(context.issue)
+            const params = { ...context.repo, issue_number: context.issue.number }
+            const { data: issue } = await github.rest.issues.get(params)
             const sections = (issue.body || '').replace(/\r\n/g, '\n').split(/^### /m)
             const field = (label) => {
               const section = sections.slice(1).find((value) => value.startsWith(`${label}\n`))
@@ -37,5 +38,5 @@ jobs:
             if (!summary) return
             const title = `[${version}] [${platform}] ${summary}`
             if (title !== issue.title) {
-              await github.rest.issues.update({ ...context.issue, title })
+              await github.rest.issues.update({ ...params, title })
             }
