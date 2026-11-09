@@ -70,24 +70,6 @@ changing mounts, links, or workspace contents concurrently is outside this threa
 model. Sandboxing also does not prevent destructive actions within the workspace
 or resource exhaustion.
 
-## Implementation
-
-- `src/shared/sandbox.ts`: persisted settings, support and runtime state.
-- `src/main/sandbox/policy.ts`: canonical workspace validation, private directories,
-  environment construction, and cleanup.
-- `src/main/sandbox/{seatbelt,mxc}.ts`: platform launch policies.
-- `src/main/sandbox/probe.ts`: positive private-storage checks and negative
-  outside-file/host-network checks before exposing a service.
-- `src/main/terminal.ts`: installation, verified launch, IPC readiness and lifetime.
-- `src/main/connections.ts`: coordinated restart and relay disconnection.
-
-The managed Python runtime is installed or updated by trusted Tether code before
-the sandbox starts. Open Terminal's source is unchanged. It must support `--ipc`;
-older versions cannot run in sandbox mode. Python uses isolated mode, and reserved
-environment variables cannot override the private home, executable lookup, or
-loader configuration. Caller-supplied custom environment values are intentional
-inputs; do not place secrets in them unless the agent should receive them.
-
 ## Build and verification
 
 Use Node 24.21 or later. macOS uses its system sandbox facility. Windows packages
