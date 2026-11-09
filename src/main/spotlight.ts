@@ -4,7 +4,6 @@ import {
   clipboard,
   desktopCapturer,
   ipcMain,
-  nativeTheme,
   screen,
   systemPreferences,
   type Display,
@@ -155,7 +154,6 @@ export class Spotlight {
       width: this.display.bounds.width,
       height: this.display.bounds.height,
       position: store.general.spotlightPosition,
-      dark: nativeTheme.shouldUseDarkColors,
       clipboard: store.general.spotlightClipboardPaste
         ? (await clipboard.readText().catch(() => '')).slice(0, 100_000)
         : '',
