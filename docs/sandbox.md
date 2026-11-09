@@ -87,26 +87,14 @@ include the pinned MXC SDK's matching native binaries with their original Micros
 signatures. Release CI signs the Tether installer. No Linux sandbox binaries or
 libraries are bundled.
 
-Run `npm run lint`, `npm run format:check`, `npm run build`, and `npm test`.
-For native integration tests, set `TETHER_TEST_PYTHON` to an absolute Python
-executable with `open-terminal==0.17.6` installed. macOS tests otherwise use Tether's
-existing managed runtime. Native tests cover authenticated IPC, allowed writes,
-denied outside reads/writes, blocked networking, capability discovery, and launch
-cancellation. The preflight test also deliberately uses an unrestricted launcher
-and checks that it is rejected.
-
-`.github/workflows/sandbox.yml` runs native checks on macOS and Windows for
-both CPU architectures. A Windows runner without the required OS capabilities
-reports its integration test as skipped; a skip is **not** containment validation.
-Before release, obtain passing native results on supported Windows devices and
-test the signed installers. The local implementation work was
-validated on macOS ARM64; Windows behavior is not established by a
-successful TypeScript build or by the macOS tests.
+Run `npm run lint`, `npm run format:check`, and `npm run build`.
+These checks do not establish native containment. Before release, verify sandbox
+behavior on supported macOS and Windows devices and test the signed installers.
 
 The Windows policy uses explicit volume-root denials with narrower grants to
 counter implicit application-package access. See Microsoft's
 [filesystem policy and overlap rules](https://github.com/microsoft/mxc/blob/main/docs/schema.md#filesystem-policy).
-Keep the startup checks and native tests when updating the SDK or OS support.
+Keep the startup checks when updating the SDK or OS support.
 Windows sandbox endpoints use the `LOCAL` named-pipe namespace because ordinary
 names have a [reported ProcessContainer namespace mismatch](https://github.com/microsoft/mxc/issues/1706).
-Host-to-container IPC must pass the native readiness test before any service is exposed.
+Host-to-container IPC must pass the startup readiness check before any service is exposed.
