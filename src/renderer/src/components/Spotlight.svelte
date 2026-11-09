@@ -313,7 +313,7 @@
         rows="1"
         maxlength="100000"
         disabled={busy}
-        class="field-sizing-content max-h-[144px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent text-[16px] leading-[24px] outline-none placeholder:text-gray-500 dark:placeholder:text-gray-600"
+        class="field-sizing-content max-h-[144px] min-h-[24px] min-w-0 flex-1 resize-none bg-transparent text-[16px] leading-[24px] text-gray-900 outline-none placeholder:text-gray-500 dark:text-gray-100 dark:placeholder:text-gray-600"
         onkeydown={(event) => {
           if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
             event.preventDefault()
