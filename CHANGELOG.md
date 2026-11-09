@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-11-09
+
+### Fixed
+
+- **Spotlight text in light mode.** Typed text now appears dark on Spotlight's light background and light on its dark background, including when Tether's appearance differs from your computer's. Previously, text could stay white in light mode and become difficult to read.
+- **Connection rejected after completing sign-in.** Tether now keeps the full sign-in session for the saved WebUI address when checking the connection, renewing sign-in, and connecting Open Terminal. This fixes cases where a server protected by Cloudflare Access and an additional login service such as Authentik sent Tether back to sign-in, then showed **WebUI redirects to a different address**, even though you had just signed in successfully.
+
 ## [0.1.11] - 2026-11-09
 
 ### Added
