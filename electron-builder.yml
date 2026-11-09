@@ -5,12 +5,16 @@ directories:
 files:
   - out/**
   - resources/**
+  - '!node_modules/@microsoft/mxc-sdk/bin/!(${arch})/**'
+  - '!node_modules/@microsoft/mxc-sdk/bin/**/*.{so,dylib}'
   - LICENSE
 extraResources:
   - from: CHANGELOG.md
     to: CHANGELOG.md
 asarUnpack:
   - node_modules/node-pty/**
+  - node_modules/@microsoft/mxc-sdk/**
+  - node_modules/koffi/**
   - resources/**
 electronFuses:
   enableNodeOptionsEnvironmentVariable: false
@@ -26,6 +30,10 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
 mac:
+  files:
+    - '!node_modules/@microsoft/mxc-sdk/**'
+    - '!node_modules/koffi/**'
+    - '!node_modules/@koromix/koffi-*/**'
   target:
     - target: dmg
     - target: zip
@@ -51,6 +59,10 @@ dmg:
       type: link
       path: /Applications
 linux:
+  files:
+    - '!node_modules/@microsoft/mxc-sdk/**'
+    - '!node_modules/koffi/**'
+    - '!node_modules/@koromix/koffi-*/**'
   target:
     - AppImage
     - snap

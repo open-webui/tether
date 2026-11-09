@@ -27,8 +27,12 @@
   let width = $state(1920)
   let height = $state(1080)
   let x = $state(0)
-  let y = $state(160)
+  let y = $state<number | null>(null)
+  let barHeight = $state(0)
   const barWidth = $derived(Math.min(748, width - 32))
+  const barY = $derived(
+    Math.max(16, Math.min(height - barHeight - 16, y ?? (height - barHeight) / 2))
+  )
   const validDestination = $derived(
     connections.some((item) => item.id === destination?.id && item.url === destination.url)
   )
@@ -104,7 +108,7 @@
     if (target.closest('.bar')) {
       if (target.closest('textarea, button, select, .preview')) return
       event.preventDefault()
-      dragging = { x: event.clientX, y: event.clientY, bx: x, by: y }
+      dragging = { x: event.clientX, y: event.clientY, bx: x, by: barY }
     } else {
       if (screenPicker && !preview) {
         void api.close()
@@ -120,7 +124,7 @@
   function move(event: MouseEvent): void {
     if (dragging) {
       x = Math.max(16, Math.min(width - barWidth - 16, dragging.bx + event.clientX - dragging.x))
-      y = Math.max(16, Math.min(height - 260, dragging.by + event.clientY - dragging.y))
+      y = Math.max(16, Math.min(height - barHeight - 16, dragging.by + event.clientY - dragging.y))
     } else if (selecting) {
       const endX = Math.max(0, Math.min(width, event.clientX))
       const endY = Math.max(0, Math.min(height, event.clientY))
@@ -161,7 +165,7 @@
   function end(): void {
     if (dragging) {
       dragging = null
-      void api.savePosition({ x, y }).catch(showError)
+      void api.savePosition({ x, y: barY }).catch(showError)
     } else if (selecting) {
       selecting = false
       if (rect.width > 10 && rect.height > 10) void capture()
@@ -170,6 +174,14 @@
   }
 
   onMount(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const applyTheme = (): void => {
+      document.documentElement.classList.toggle('dark', media.matches)
+      document.documentElement.classList.toggle('light', !media.matches)
+      document.documentElement.style.colorScheme = media.matches ? 'dark' : 'light'
+    }
+    applyTheme()
+    media.addEventListener('change', applyTheme)
     const offInit = api.onInit(async (state) => {
       generation++
       connections = state.connections
@@ -185,10 +197,8 @@
           state.position?.x ?? (width - Math.min(748, width - 32)) / 2
         )
       )
-      y = Math.max(16, Math.min(height - 260, state.position?.y ?? 160))
+      y = state.position?.y ?? null
       screenPicker = state.useScreenPicker
-      document.documentElement.classList.toggle('dark', state.dark)
-      document.documentElement.style.colorScheme = state.dark ? 'dark' : 'light'
       if (!query && !files.length && !busy && state.clipboard) query = state.clipboard
       await changeLanguage(state.language)
       await focusInput()
@@ -202,6 +212,7 @@
     return () => {
       offInit()
       offHide()
+      media.removeEventListener('change', applyTheme)
     }
   })
 </script>
@@ -233,10 +244,11 @@
     ></div>
   {/if}
   <section
+    bind:offsetHeight={barHeight}
     class="bar rounded-[20px] border border-black/5 bg-white px-[12px] pb-[12px] pt-[8px] shadow-2xl dark:border-white/10 dark:bg-gray-900"
     aria-label={$i18n.t('spotlight.title')}
     style:left={`${x}px`}
-    style:top={`${y}px`}
+    style:top={`${barY}px`}
     style:width={`${barWidth}px`}
   >
     <div class="mb-[8px] flex items-center gap-[12px] text-[11px] text-gray-600 dark:text-gray-400">

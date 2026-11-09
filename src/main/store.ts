@@ -34,6 +34,7 @@ export class Store {
   selected: string | null = null
   general: GeneralConfig = { ...defaultGeneralConfig }
   localServer: LocalServerConfig = {
+    sandbox: { enabled: false, workspacePath: '', networkAccess: false },
     enabled: false,
     version: '',
     autoUpdate: false,

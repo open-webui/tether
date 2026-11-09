@@ -1,11 +1,18 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { SpotlightAPI, SpotlightInit } from '../shared/spotlight'
 
+// The first init can arrive while the renderer is still loading translations.
+let latestInit: SpotlightInit | undefined
+ipcRenderer.on('spotlight:init', (_event, state: SpotlightInit) => {
+  latestInit = state
+})
+
 const api: SpotlightAPI = {
   onInit: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, state: SpotlightInit): void =>
       callback(state)
     ipcRenderer.on('spotlight:init', listener)
+    if (latestInit) callback(latestInit)
     return () => ipcRenderer.removeListener('spotlight:init', listener)
   },
   onHide: (callback) => {

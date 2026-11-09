@@ -1,0 +1,30 @@
+name: Sandbox checks
+on:
+  pull_request:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel, windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - run: python -m pip install open-terminal==0.17.6
+      - name: Test native containment and lifecycle
+        env:
+          TETHER_TEST_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: npm test

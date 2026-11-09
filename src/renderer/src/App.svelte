@@ -565,7 +565,7 @@
       class="terminal-output"
       style:height={`${dockHeight}px`}
       aria-label={activeTerminalTab === 'shell'
-        ? $i18n.t('terminal.shell')
+        ? $i18n.t('terminal.hostShell')
         : selected
           ? $i18n.t('terminal.connectionTitle', { name: selected.name })
           : $i18n.t('terminal.setup')}
@@ -581,7 +581,7 @@
         <button
           class:active={activeTerminalTab === 'shell'}
           aria-pressed={activeTerminalTab === 'shell'}
-          onclick={() => (terminalTab = 'shell')}>{$i18n.t('terminal.shell')}</button
+          onclick={() => (terminalTab = 'shell')}>{$i18n.t('terminal.hostShell')}</button
         >
       </nav>
       <div class="terminal-pane">

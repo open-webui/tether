@@ -8,7 +8,6 @@ export interface SpotlightInit {
   width: number
   height: number
   position: { x: number; y: number } | null
-  dark: boolean
   clipboard: string
   useScreenPicker: boolean
 }

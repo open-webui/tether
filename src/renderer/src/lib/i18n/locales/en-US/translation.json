@@ -218,5 +218,21 @@
   "settings.terminal.httpAllInterfaces": "All interfaces (0.0.0.0)",
   "settings.terminal.httpNetworkDesc": "Other devices can connect using this computer’s network address and API key. HTTP traffic is unencrypted.",
   "settings.terminal.copyCredentials": "Copy URL and API key",
-  "settings.terminal.httpCredentialsDesc": "Copies access for the selected connection. The port and key change after restart. For other devices, replace 127.0.0.1 with this computer’s network address."
+  "settings.terminal.httpCredentialsDesc": "Copies access for the selected connection. The port and key change after restart. For other devices, replace 127.0.0.1 with this computer’s network address.",
+  "settings.sandbox.title": "Sandbox",
+  "settings.sandbox.enable": "Restrict file access",
+  "settings.sandbox.workspace": "Workspace folder",
+  "settings.sandbox.description": "Agents can modify files only in the selected folder.",
+  "settings.sandbox.details": "Shared by all connections. Files here can be changed or deleted.",
+  "settings.sandbox.networkAccess": "Network access",
+  "settings.sandbox.networkAccessDesc": "Allow agents to connect to the internet.",
+  "settings.sandbox.restartNotice": "Restarts all Open Terminal sessions.",
+  "settings.sandbox.existingProcesses": "Background commands may retain access until they exit.",
+  "settings.sandbox.apply": "Apply and restart",
+  "settings.sandbox.active": "Sandbox active",
+  "settings.sandbox.starting": "Sandbox starting…",
+  "settings.sandbox.inactive": "Sandbox enabled. Open Terminal is not running.",
+  "settings.sandbox.unavailable": "Sandbox unavailable on this device.",
+  "settings.sandbox.failed": "Couldn’t start the sandbox. Sessions remain blocked.",
+  "terminal.hostShell": "Host shell (unrestricted)"
 }

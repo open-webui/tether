@@ -1,4 +1,12 @@
+import {
+  isSandboxEnvironmentVariable,
+  parseSandboxConfig,
+  type SandboxConfig,
+  type SandboxState
+} from './sandbox'
+
 export interface LocalServerConfig {
+  sandbox: SandboxConfig
   enabled: boolean
   version: string
   autoUpdate: boolean
@@ -120,6 +128,7 @@ export interface AppConfig extends GeneralConfig {
 }
 
 export interface RuntimeState {
+  sandbox?: SandboxState
   version: string | null
   ipcSupported?: boolean
   status: string
@@ -130,6 +139,7 @@ export interface RuntimeState {
 export function parseLocalServerConfig(value: unknown): LocalServerConfig {
   if (!value || typeof value !== 'object') throw new Error('Invalid Open Terminal settings')
   const config = value as LocalServerConfig
+  const sandbox = parseSandboxConfig(config.sandbox)
   if (config.enabled !== undefined && typeof config.enabled !== 'boolean')
     throw new Error('Invalid Open Terminal settings')
   if (typeof config.version !== 'string' || typeof config.autoUpdate !== 'boolean')
@@ -159,6 +169,8 @@ export function parseLocalServerConfig(value: unknown): LocalServerConfig {
       )
         throw new Error('Environment variables need a valid name and text value.')
       const normalized = name.toUpperCase()
+      if (sandbox.enabled && isSandboxEnvironmentVariable(name))
+        throw new Error(`${name} is managed by Tether while the sandbox is enabled.`)
       if (names.has(normalized)) throw new Error(`Duplicate environment variable: ${name}`)
       names.add(normalized)
       if (
@@ -180,6 +192,7 @@ export function parseLocalServerConfig(value: unknown): LocalServerConfig {
     }
   }
   return {
+    sandbox,
     enabled: config.enabled ?? false,
     version,
     autoUpdate: config.autoUpdate,

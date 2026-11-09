@@ -1,6 +1,6 @@
 {
   "name": "tether",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "private": true,
   "description": "Your Open WebUI, wherever you work.",
   "license": "SEE LICENSE IN LICENSE",
@@ -12,7 +12,7 @@
     "url": "https://github.com/open-webui/tether.git"
   },
   "engines": {
-    "node": ">=22.16.0"
+    "node": ">=24.21.0"
   },
   "scripts": {
     "format": "prettier --plugin prettier-plugin-svelte --write .",
@@ -34,6 +34,7 @@
   },
   "dependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "@microsoft/mxc-sdk": "1.0.1",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.3.9",
     "extract-zip": "^2.0.1",

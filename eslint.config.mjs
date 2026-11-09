@@ -8,6 +8,10 @@ export default defineConfig(
   tseslint.configs.recommended,
   eslintPluginSvelte.configs['flat/recommended'],
   {
+    files: ['tests/**/*.mjs'],
+    rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
+  },
+  {
     files: ['**/*.svelte'],
     languageOptions: {
       parserOptions: {

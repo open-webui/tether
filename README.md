@@ -17,6 +17,14 @@ Ironically, the app called Tether untethers you from your desk. [We can explain.
 
 Snap and Flatpak packages are available on the [releases page](https://github.com/open-webui/tether/releases).
 
+### Workspace sandbox
+
+**Room to work. Boundaries you choose.**
+
+On macOS and supported Windows devices, restrict Open Terminal to a local folder
+in **Settings → Open Terminal → Sandbox**. Workspace sandboxing is unavailable on Linux.
+See the [sandbox guide](docs/sandbox.md) for platform support, behavior, and limitations.
+
 ### Contributing
 
 We don't take pull requests. [Open an issue](https://github.com/open-webui/tether/issues) describing the bug or idea.
