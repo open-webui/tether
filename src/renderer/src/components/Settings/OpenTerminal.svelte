@@ -53,12 +53,17 @@
   let env = $state<{ name: string; value: string }[]>([])
   let advancedOpen = $state(false)
   let restarting = $state(false)
-  let savedSandbox = $state<SandboxConfig>({ enabled: false, workspacePath: '' })
+  let savedSandbox = $state<SandboxConfig>({
+    enabled: false,
+    workspacePath: '',
+    networkAccess: false
+  })
   let sandboxEnabled = $state(false)
   let workspacePath = $state('')
+  let networkAccess = $state(false)
   let sandboxSaving = $state(false)
   const sandboxDirty = $derived(
-    sandboxConfigChanged(savedSandbox, { enabled: sandboxEnabled, workspacePath })
+    sandboxConfigChanged(savedSandbox, { enabled: sandboxEnabled, workspacePath, networkAccess })
   )
   let runtime = $state<RuntimeState>({ version: null, status: '', busy: false, error: '' })
   let loaded = $state(false)
@@ -148,11 +153,12 @@
     sandboxSaving = true
     error = ''
     try {
-      await save({ enabled: sandboxEnabled, workspacePath })
+      await save({ enabled: sandboxEnabled, workspacePath, networkAccess })
       const config = await window.api.getConfig()
       savedSandbox = config.localServer.sandbox
       sandboxEnabled = savedSandbox.enabled
       workspacePath = savedSandbox.workspacePath
+      networkAccess = savedSandbox.networkAccess
       runtime = await window.api.getRuntimeState()
     } catch (cause) {
       error = String(cause).replace(/^Error: /, '')
@@ -278,6 +284,7 @@
         savedSandbox = config.localServer.sandbox
         sandboxEnabled = savedSandbox.enabled
         workspacePath = savedSandbox.workspacePath
+        networkAccess = savedSandbox.networkAccess
         env = Object.entries(config.localServer.env ?? {}).map(([name, value]) => ({ name, value }))
         runtime = state
         loaded = true
@@ -411,6 +418,20 @@
         >
       </div>
       <p class="setting-description mt-2">{$i18n.t('settings.sandbox.details')}</p>
+      <div class="setting-row mt-3">
+        <div>
+          <div class="setting-label">{$i18n.t('settings.sandbox.networkAccess')}</div>
+          <p class="setting-description">{$i18n.t('settings.sandbox.networkAccessDesc')}</p>
+        </div>
+        <Switch
+          checked={networkAccess}
+          label={$i18n.t('settings.sandbox.networkAccess')}
+          disabled={busy || !sandboxEnabled}
+          onchange={(value) => {
+            networkAccess = value
+          }}
+        />
+      </div>
     {/if}
     {#if runtime.sandbox?.support.supported === false}
       <p class="setting-description mt-2" role="status">

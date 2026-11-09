@@ -19,6 +19,8 @@ Snap and Flatpak packages are available on the [releases page](https://github.co
 
 ### Workspace sandbox
 
+**Room to work. Boundaries you choose.**
+
 On macOS and supported Windows devices, restrict Open Terminal to a local folder
 in **Settings → Open Terminal → Sandbox**. Workspace sandboxing is unavailable on Linux.
 See the [sandbox guide](docs/sandbox.md) for platform support, behavior, and limitations.

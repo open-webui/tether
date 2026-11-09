@@ -58,6 +58,9 @@ for mode in ('r', 'w'):
     else:
         f.close()
         raise RuntimeError('Outside filesystem access was allowed')
+${
+  !policy.networkAccess || policy.backend === 'processcontainer'
+    ? `
 try:
     connection = socket.create_connection(('127.0.0.1', ${address.port}), timeout=1)
 except OSError:
@@ -65,6 +68,9 @@ except OSError:
 else:
     connection.close()
     raise RuntimeError('Host network access was allowed')
+`
+    : ''
+}
 print(${JSON.stringify(marker)}, flush=True)
 `
     child = await spawn({ ...launch, args: ['-I', '-c', script] }, policy, deadline)

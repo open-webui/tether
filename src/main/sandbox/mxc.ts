@@ -36,7 +36,10 @@ export async function spawnMxc(launch: ServiceLaunch, policy: SandboxPolicy): Pr
       readwritePaths: [policy.workspacePath, policy.sessionPath],
       clearPolicyOnExit: true
     },
-    network: { egress: { default: 'deny' }, ingress: { default: 'deny', hostLoopback: 'deny' } },
+    network: {
+      egress: { default: policy.networkAccess ? 'allow' : 'deny' },
+      ingress: { default: 'deny', hostLoopback: 'deny' }
+    },
     ui: { disable: true, clipboard: 'none', allowInputInjection: false }
   }
   const support = probe(request)

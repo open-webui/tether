@@ -17,6 +17,7 @@ export class SandboxError extends Error {
 
 export interface SandboxPolicy {
   backend: SandboxBackend
+  networkAccess: boolean
   workspacePath: string
   runtimePath: string
   sessionPath: string
@@ -125,6 +126,7 @@ export async function validateWorkspace(
 
 export async function createSandboxPolicy(input: {
   backend: SandboxBackend
+  networkAccess: boolean
   workspacePath: string
   runtimePath: string
   socketPath: string
@@ -142,6 +144,7 @@ export async function createSandboxPolicy(input: {
   const sessionPath = await realpath(await mkdtemp(join(tmpdir(), 'tether-sandbox-')))
   const policy: SandboxPolicy = {
     backend: input.backend,
+    networkAccess: input.networkAccess,
     workspacePath,
     runtimePath,
     sessionPath,
@@ -236,7 +239,7 @@ export function sandboxEnvironment(
     PYTHONIOENCODING: 'utf-8',
     PYTHONSAFEPATH: '1',
     PIP_DISABLE_PIP_VERSION_CHECK: '1',
-    PIP_NO_INDEX: '1',
+    PIP_NO_INDEX: policy.networkAccess ? '0' : '1',
     OPEN_TERMINAL_ISOLATED: 'true',
     OPEN_TERMINAL_API_KEY: apiKey,
     OPEN_TERMINAL_ENABLE_BROWSER: 'false',

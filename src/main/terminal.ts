@@ -47,7 +47,7 @@ export class OpenTerminal {
 
   constructor(
     private getConfig: () => LocalServerConfig = () => ({
-      sandbox: { enabled: false, workspacePath: '' },
+      sandbox: { enabled: false, workspacePath: '', networkAccess: false },
       enabled: false,
       version: '',
       autoUpdate: false,
@@ -65,6 +65,7 @@ export class OpenTerminal {
     this.state.sandbox = {
       active: false,
       workspacePath: config.workspacePath,
+      networkAccess: config.networkAccess,
       policyRevision: this.policyRevision,
       ...this.state.sandbox,
       ...{ support }
@@ -89,6 +90,7 @@ export class OpenTerminal {
                     handle.service.info.status === 'started'
                 ),
               workspacePath: config.workspacePath,
+              networkAccess: config.networkAccess,
               policyRevision: this.policyRevision
             }
           }
@@ -341,6 +343,7 @@ export class OpenTerminal {
               active: false,
               support: support!,
               workspacePath: config.sandbox.workspacePath,
+              networkAccess: config.sandbox.networkAccess,
               policyRevision: revision
             }
           })
@@ -364,6 +367,7 @@ export class OpenTerminal {
             sandbox = await createSandboxPolicy({
               backend: support!.backend!,
               workspacePath: config.sandbox.workspacePath,
+              networkAccess: config.sandbox.networkAccess,
               runtimePath: this.runtime.directory,
               socketPath: endpoint.socketPath!,
               forbiddenPaths: sandboxForbiddenPaths(),
@@ -458,6 +462,7 @@ export class OpenTerminal {
             active: false,
             support,
             workspacePath: this.getConfig().sandbox.workspacePath,
+            networkAccess: this.getConfig().sandbox.networkAccess,
             policyRevision: this.policyRevision,
             error: message
           }
