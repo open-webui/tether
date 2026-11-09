@@ -32,6 +32,19 @@ const nodeChecksums: Record<string, string> = {
   'win-x64': 'ca1bff5d8ead13c9f2ea404a176db46bd430704d5b5113734049fa365e7799e2'
 }
 
+function describeDownloadError(error: unknown, seen = new Set<unknown>()): string {
+  if (!(error instanceof Error)) return String(error)
+  if (seen.has(error)) return ''
+  seen.add(error)
+
+  const code = 'code' in error ? String(error.code) : ''
+  const details = [code ? `${error.message} (${code})` : error.message]
+  if (error.cause !== undefined) details.push(describeDownloadError(error.cause, seen))
+  if (error instanceof AggregateError)
+    details.push(...error.errors.map((cause) => describeDownloadError(cause, seen)))
+  return details.filter(Boolean).join(': ')
+}
+
 export interface RuntimeProcess {
   process: ChildProcess
   readonly exited: boolean
@@ -277,24 +290,29 @@ export class Runtime {
   }
 
   private async download(url: string, archive: string, checksum: string): Promise<void> {
-    const response = await fetch(url, { signal: this.signal })
-    if (!response.ok || !response.body)
-      throw new Error('Runtime download failed (' + response.status + ').')
-    const hash = createHash('sha256')
-    const check = new Transform({
-      transform(chunk, _encoding, callback) {
-        hash.update(chunk)
-        callback(null, chunk)
-      }
-    })
-    await pipeline(
-      Readable.fromWeb(response.body as never),
-      check,
-      createWriteStream(archive, { flags: 'wx', mode: 0o600 }),
-      { signal: this.signal }
-    )
-    if (hash.digest('hex') !== checksum) throw new Error('Runtime checksum mismatch.')
-    this.signal.throwIfAborted()
+    try {
+      const response = await fetch(url, { signal: this.signal })
+      if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`.trim())
+      if (!response.body) throw new Error('Response has no body.')
+      const hash = createHash('sha256')
+      const check = new Transform({
+        transform(chunk, _encoding, callback) {
+          hash.update(chunk)
+          callback(null, chunk)
+        }
+      })
+      await pipeline(
+        Readable.fromWeb(response.body as never),
+        check,
+        createWriteStream(archive, { flags: 'wx', mode: 0o600 }),
+        { signal: this.signal }
+      )
+      if (hash.digest('hex') !== checksum) throw new Error('Runtime checksum mismatch.')
+      this.signal.throwIfAborted()
+    } catch (error) {
+      this.signal.throwIfAborted()
+      throw new Error(`Runtime download failed: ${describeDownloadError(error)}`, { cause: error })
+    }
   }
 
   private async downloadPython(status: (message: string) => void): Promise<void> {
