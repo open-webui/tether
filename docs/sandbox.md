@@ -60,8 +60,8 @@ A macOS command that detached from its process group can outlive the Open Termin
 service and retain its **original** workspace access. Restarting Tether alone is
 not proof that such a command exited. Stop those commands, or reboot, when complete
 revocation of an old workspace is required. Programs launched before sandboxing
-was enabled can likewise retain their original access. The settings UI calls this
-out before applying changes.
+was enabled can likewise retain their original access. On macOS, the **Apply and
+restart** button explains this in a tooltip when a change removes access.
 
 Normal shutdown removes session storage. An application or machine crash can leave
 temporary directories behind; there is no automatic crash-recovery garbage

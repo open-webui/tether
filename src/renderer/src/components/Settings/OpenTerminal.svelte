@@ -2,6 +2,7 @@
   /* eslint-disable svelte/no-at-html-tags -- Icons are static SVG imports from Iconoir. */
   import i18n from '../../lib/i18n'
   import { onMount } from 'svelte'
+  import { tooltip } from '../../actions/tooltip'
   import { parseLocalServerConfig, type RuntimeState } from '../../../../shared/config'
   import type { ServiceStatus } from '../../../../shared/terminal'
   import { sandboxConfigChanged, type SandboxConfig } from '../../../../shared/sandbox'
@@ -42,6 +43,7 @@
   }
 
   let version = $state('')
+  let platform = $state('')
   let homeDirectory = $state('')
   let defaultHomeDirectory = $state('')
   let enabled = $state(false)
@@ -64,6 +66,13 @@
   let sandboxSaving = $state(false)
   const sandboxDirty = $derived(
     sandboxConfigChanged(savedSandbox, { enabled: sandboxEnabled, workspacePath, networkAccess })
+  )
+  const sandboxRestrictsAccess = $derived(
+    platform === 'darwin' &&
+      sandboxEnabled &&
+      (!savedSandbox.enabled ||
+        workspacePath.trim() !== savedSandbox.workspacePath ||
+        (savedSandbox.networkAccess && !networkAccess))
   )
   let runtime = $state<RuntimeState>({ version: null, status: '', busy: false, error: '' })
   let loaded = $state(false)
@@ -275,6 +284,7 @@
       .then(([config, state, info]) => {
         if (disposed) return
         version = config.localServer.version
+        platform = info.platform
         homeDirectory = config.localServer.homeDirectory ?? ''
         defaultHomeDirectory = info.homeDirectory
         enabled = config.localServer.enabled
@@ -454,10 +464,15 @@
     {/if}
     {#if sandboxDirty}
       <p class="setting-description mt-2">{$i18n.t('settings.sandbox.restartNotice')}</p>
-      <p class="setting-description mt-2">{$i18n.t('settings.sandbox.existingProcesses')}</p>
       <button
         class="env-action mt-2"
         disabled={busy || (sandboxEnabled && !workspacePath.trim())}
+        use:tooltip={{
+          content: $i18n.t('settings.sandbox.existingProcesses'),
+          onShow: () => {
+            if (!sandboxRestrictsAccess) return false
+          }
+        }}
         onclick={applySandbox}
       >
         {$i18n.t('settings.sandbox.apply')}
