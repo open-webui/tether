@@ -18,9 +18,7 @@ export function isAccessLogin(address: string, connectionURL: string): boolean {
 }
 
 export async function accessCookies(profile: Session, url: string): Promise<Electron.Cookie[]> {
-  return (await profile.cookies.get({ url })).filter((cookie) =>
-    ['CF_Authorization', 'CF_Binding'].includes(cookie.name)
-  )
+  return profile.cookies.get({ url })
 }
 
 export async function accessHeaders(
