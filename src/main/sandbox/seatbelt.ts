@@ -41,7 +41,7 @@ export function seatbeltLaunch(launch: ServiceLaunch, policy: SandboxPolicy): Se
           '(allow network-outbound (control-name "com.apple.netsrc"))',
           '(allow network-outbound (literal "/private/var/run/mDNSResponder"))',
           '(allow mach-lookup (global-name "com.apple.mDNSResponder") (global-name "com.apple.trustd") (global-name "com.apple.trustd.agent"))',
-          '(allow file-read* (literal "/private/etc/hosts") (literal "/private/etc/resolv.conf") (literal "/private/var/run/resolv.conf") (literal "/private/etc/ssl/cert.pem"))'
+          '(allow file-read* (literal "/private/etc/hosts") (literal "/private/etc/resolv.conf") (literal "/private/var/run/resolv.conf") (literal "/private/etc/ssl/cert.pem") (literal "/private/etc/ssl/openssl.cnf"))'
         ]
       : []),
     `(allow file-read* ${literal('/private/etc/paths')})`

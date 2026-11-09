@@ -10,8 +10,16 @@ temporary storage and read access to required program files. Other personal file
 are outside the sandbox's allowed paths. This is access control, not a backup or
 an undo feature.
 
-Sandboxed commands cannot use the network. Browser automation, desktop control,
-and the direct HTTP endpoint are disabled. Tether itself still connects to Open
+Sandboxed commands run offline by default. Enable **Network access** to allow
+outbound internet connections, then select **Apply and restart**. The workspace
+restrictions remain in force. Incoming network connections remain blocked;
+Windows also blocks private-network and host-loopback traffic. On macOS, outbound
+connections can reach local-network and host services as well. Network requests
+can send workspace data, and filesystem restrictions do not control what a
+reachable service can do on the agent's behalf.
+
+Browser automation, desktop control, and the direct HTTP endpoint remain disabled
+regardless of the network toggle. Tether itself still connects to Open
 WebUI and forwards authenticated requests through a local IPC endpoint. Previous
 browser, desktop, and HTTP preferences are retained for when sandboxing is off.
 The separately labelled **Host shell (unrestricted)** is a user-operated shell and
@@ -41,7 +49,7 @@ does not provide containment.
 
 ## Changes and process lifetime
 
-Applying a changed workspace disconnects the old Open Terminal services, cancels
+Applying a changed workspace or network permission disconnects the old Open Terminal services, cancels
 pending starts, stops their process groups or containers, cleans up temporary
 storage, saves the setting, and starts fresh services. A policy revision prevents
 a stale service from being exposed after a change. Failed cleanup blocks further

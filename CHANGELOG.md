@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Optional workspace sandbox for Open Terminal on macOS and supported Windows devices.** Settings → Open Terminal → Sandbox lets you choose one shared local workspace and apply it to new sessions. Sandboxed commands run offline; browser, desktop, and direct HTTP access are disabled while Tether's WebUI connection stays available. Unsupported devices or failed containment checks leave Open Terminal stopped. See the [sandbox guide](docs/sandbox.md) for platform validation requirements and process-lifetime limitations.
+- **Optional workspace sandbox for Open Terminal on macOS and supported Windows devices.** Settings → Open Terminal → Sandbox lets you choose one shared local workspace and apply it to new sessions. Sandboxed commands run offline by default; an optional Network access toggle permits outbound internet connections. Browser, desktop, and direct HTTP access remain disabled while Tether's WebUI connection stays available. Unsupported devices or failed containment checks leave Open Terminal stopped. See the [sandbox guide](docs/sandbox.md) for platform validation requirements and process-lifetime limitations.
 
 ## [0.1.12] - 2026-11-09
 
