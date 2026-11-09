@@ -76,7 +76,7 @@ export function connectionTLS(connection: Connection): ConnectionOptions {
 
 export async function validateConnection(connection: Connection): Promise<Connection> {
   const candidate = { ...connection, url: normalizeURL(connection.url.trim()) }
-  // Keep WebUI credentials out of probes; a fresh verifier avoids cached certificate verdicts.
+  // A fresh verifier avoids cached certificate verdicts; cookies come from the connection.
   for (let attempt = 0; attempt < 2; attempt++) {
     const profile = session.fromPartition('validate-' + randomUUID(), { cache: false })
     let rejected: { certificate: X509Certificate; error: number } | undefined
