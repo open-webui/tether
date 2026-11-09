@@ -281,6 +281,31 @@ export class Connections {
     this.emit()
   }
 
+  private terminalPaused = false
+
+  async applySandboxConfig(save: () => Promise<void>): Promise<void> {
+    if (this.updatingRuntime) throw new Error('Open Terminal is already restarting or updating.')
+    this.updatingRuntime = true
+    this.terminalPaused = true
+    for (const entry of this.local.values()) {
+      clearTimeout(entry.retry)
+      entry.retry = undefined
+      entry.handle = undefined
+      entry.relay?.setService('open_terminal')
+    }
+    try {
+      await this.terminal.restart()
+      await save()
+      this.terminalPaused = false
+    } finally {
+      this.updatingRuntime = false
+      if (!this.terminalPaused && !this.stopped) {
+        void this.startLocalTerminal()
+        for (const [id, entry] of this.local) void this.startTerminal(id, entry)
+      }
+    }
+  }
+
   private async restartTerminal(update = false): Promise<void> {
     if (this.updatingRuntime) throw new Error('Open Terminal is already restarting or updating.')
     this.updatingRuntime = true
@@ -301,6 +326,7 @@ export class Connections {
         await this.terminal.restart()
       }
       installed = true
+      this.terminalPaused = false
     } finally {
       this.updatingRuntime = false
       if (installed && !this.stopped) {
@@ -363,7 +389,8 @@ export class Connections {
           (target.id === null || this.store.connections.some((item) => item.id === target.id))
         ) {
           service = this.terminal.getService(target.id)
-          if (service.info.status === 'stopped') service = this.terminal.getService(null)
+          if (service.info.status === 'stopped' && !this.store.localServer.sandbox.enabled)
+            service = this.terminal.getService(null)
         } else return
         attachTerminal(service, event.sender, attachment)
       } catch {
@@ -1043,7 +1070,13 @@ export class Connections {
   }
 
   private async startLocalTerminal(): Promise<void> {
-    if (!this.store.localServer.enabled || this.stopped || this.updatingRuntime) return
+    if (
+      !this.store.localServer.enabled ||
+      this.stopped ||
+      this.updatingRuntime ||
+      this.terminalPaused
+    )
+      return
     let entry = this.local.get(null)
     if (!entry) {
       entry = {}
@@ -1055,6 +1088,7 @@ export class Connections {
   private async startTerminal(id: string | null, entry: LocalConnection): Promise<void> {
     if (
       !this.store.localServer.enabled ||
+      this.terminalPaused ||
       this.stopped ||
       this.updatingRuntime ||
       this.local.get(id) !== entry ||
@@ -1092,16 +1126,20 @@ export class Connections {
         entry.handle = undefined
         entry.relay?.setService('open_terminal')
         if (this.local.get(id) === entry && !this.stopped && !this.updatingRuntime) {
-          entry.terminalError = 'Open Terminal stopped. Restarting.'
+          entry.terminalError = this.store.localServer.sandbox.enabled
+            ? 'Sandboxed Open Terminal stopped. Restart it from Settings.'
+            : 'Open Terminal stopped. Restarting.'
           this.localChanged(id, entry)
-          entry.retry = setTimeout(() => void this.startTerminal(id, entry), 5000)
+          if (!this.store.localServer.sandbox.enabled)
+            entry.retry = setTimeout(() => void this.startTerminal(id, entry), 5000)
         }
       })
     } catch (error) {
       if (this.local.get(id) === entry && !this.stopped && !this.updatingRuntime) {
         entry.terminalError = String(error)
         this.localChanged(id, entry)
-        entry.retry = setTimeout(() => void this.startTerminal(id, entry), 30000)
+        if (!this.store.localServer.sandbox.enabled)
+          entry.retry = setTimeout(() => void this.startTerminal(id, entry), 30000)
       }
     } finally {
       entry.starting = false

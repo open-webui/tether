@@ -51,7 +51,10 @@ export class ManagedService {
   }
 
   constructor(
-    private readonly spawn: (launch: ServiceLaunch) => PtyProcess,
+    private readonly spawn: (
+      launch: ServiceLaunch,
+      signal: AbortSignal
+    ) => PtyProcess | Promise<PtyProcess>,
     readonly interactive = false,
     private readonly stopTimeout = 2000
   ) {}
@@ -117,7 +120,7 @@ export class ManagedService {
         signal.throwIfAborted()
         const launch = await prepare(signal)
         signal.throwIfAborted()
-        const child = this.spawn(launch)
+        const child = await this.spawn(launch, signal)
         run.child = child
         run.dispose.push(
           child.onData((data) => {
@@ -145,6 +148,7 @@ export class ManagedService {
             })
           }).dispose
         )
+        signal.throwIfAborted()
         this.update({ pid: child.pid, url: launch.url ?? null })
         // Race even a non-cooperative readiness probe against cancellation/exit.
         if (launch.ready) await abortable(launch.ready(signal), signal)

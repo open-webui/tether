@@ -31,6 +31,9 @@ import {
 } from './updater'
 import type { AppInfo } from '../shared/api'
 import { parseGeneralConfig, parseLocalServerConfig, type AppConfig } from '../shared/config'
+import { sandboxConfigChanged } from '../shared/sandbox'
+import { getSandboxSupport, sandboxForbiddenPaths } from './sandbox'
+import { validateWorkspace } from './sandbox/policy'
 
 import { Connections } from './connections'
 import { Spotlight } from './spotlight'
@@ -239,6 +242,17 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
       'localServer' in patch ? parseLocalServerConfig(patch.localServer) : previousServer
     if (localServer.enabled !== previousServer.enabled)
       throw new Error('Install Open Terminal from Settings to enable it.')
+    const sandboxChanged = sandboxConfigChanged(previousServer.sandbox, localServer.sandbox)
+    if (sandboxChanged && localServer.sandbox.enabled) {
+      const support = await getSandboxSupport()
+      if (!support.supported)
+        throw new Error(support.reason || 'Sandboxing is unavailable on this device.')
+      localServer.sandbox.workspacePath = await validateWorkspace(
+        localServer.sandbox.workspacePath,
+        sandboxForbiddenPaths(),
+        AbortSignal.timeout(30000)
+      )
+    }
     if (localServer.homeDirectory && localServer.homeDirectory !== previousServer.homeDirectory) {
       if (!isAbsolute(localServer.homeDirectory))
         throw new Error('Enter an absolute home directory path.')
@@ -258,9 +272,13 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
           reserved.push(next[key])
         }
       }
-      store.general = next
-      store.localServer = localServer
-      await store.saveConfig()
+      const save = async (): Promise<void> => {
+        store.general = next
+        store.localServer = localServer
+        await store.saveConfig()
+      }
+      if (sandboxChanged) await connections.applySandboxConfig(save)
+      else await save()
     } catch (error) {
       store.general = previous
       store.localServer = previousServer
@@ -287,8 +305,10 @@ function saveConfig(value: unknown, syncTheme = true): Promise<void> {
     updateTray()
     if (next.deviceName !== previous.deviceName) connections.updateDeviceName()
     if (
-      localServer.httpEnabled !== previousServer.httpEnabled ||
-      (localServer.httpEnabled && localServer.httpHost !== previousServer.httpHost)
+      !sandboxChanged &&
+      !localServer.sandbox.enabled &&
+      (localServer.httpEnabled !== previousServer.httpEnabled ||
+        (localServer.httpEnabled && localServer.httpHost !== previousServer.httpHost))
     )
       await connections.applyTerminalTransport()
   })

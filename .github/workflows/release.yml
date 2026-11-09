@@ -6,6 +6,9 @@ on:
       - release
 
 jobs:
+  sandbox:
+    uses: ./.github/workflows/sandbox.yml
+
   compile:
     name: Compile (Typecheck + Vite Build)
     runs-on: ubuntu-latest
@@ -16,7 +19,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: 'npm'
 
       - name: Install Dependencies
@@ -37,7 +40,7 @@ jobs:
 
   package:
     name: Package (${{ matrix.os }}-${{ matrix.arch }})
-    needs: compile
+    needs: [compile, sandbox]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -63,7 +66,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: 'npm'
 
       - name: Install Dependencies
@@ -235,7 +238,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Install release tooling
         run: npm ci --ignore-scripts

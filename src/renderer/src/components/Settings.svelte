@@ -39,6 +39,8 @@
         $i18n.t('settings.terminal.searchTerms'),
         $i18n.t('settings.terminal.httpAccess'),
         $i18n.t('settings.terminal.httpHost'),
+        $i18n.t('settings.sandbox.title'),
+        $i18n.t('settings.sandbox.workspace'),
         '127.0.0.1 0.0.0.0'
       ].join(' ')
     },

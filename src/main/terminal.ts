@@ -12,6 +12,14 @@ import type { RelayDestination } from './relay'
 import { ManagedService, waitForReady } from './process/managedService'
 import { spawnPty } from './process/nativePty'
 import { createTerminalEndpoint, readTerminalJSON } from './process/terminalEndpoint'
+import { getSandboxSupport, sandboxForbiddenPaths, spawnSandboxed } from './sandbox'
+import {
+  createSandboxPolicy,
+  sandboxEnvironment,
+  SandboxError,
+  type SandboxPolicy
+} from './sandbox/policy'
+import { probeSandbox } from './sandbox/probe'
 
 export interface TerminalHandle {
   url: string
@@ -22,6 +30,7 @@ export interface TerminalHandle {
   capabilities: Record<string, boolean>
   service: ManagedService
   stop(): Promise<void>
+  sandbox?: SandboxPolicy
 }
 
 export class OpenTerminal {
@@ -33,9 +42,12 @@ export class OpenTerminal {
   private services = new Map<string | null, ManagedService>()
   private handles = new Map<string | null, TerminalHandle>()
   private cleanups = new Set<Promise<void>>()
+  private cleanupError?: Error
+  private policyRevision = 0
 
   constructor(
     private getConfig: () => LocalServerConfig = () => ({
+      sandbox: { enabled: false, workspacePath: '' },
       enabled: false,
       version: '',
       autoUpdate: false,
@@ -48,12 +60,45 @@ export class OpenTerminal {
 
   async getState(): Promise<RuntimeState> {
     if (!this.state.busy) this.state.version = await this.runtime.getPackageVersion('open-terminal')
-    return { ...this.state }
+    const support = await getSandboxSupport()
+    const config = this.getConfig().sandbox
+    this.state.sandbox = {
+      active: false,
+      workspacePath: config.workspacePath,
+      policyRevision: this.policyRevision,
+      ...this.state.sandbox,
+      ...{ support }
+    }
+    return this.snapshot()
+  }
+
+  private snapshot(): RuntimeState {
+    const config = this.getConfig().sandbox
+    const sandbox = this.state.sandbox
+    return {
+      ...this.state,
+      ...(sandbox
+        ? {
+            sandbox: {
+              ...sandbox,
+              active:
+                config.enabled &&
+                [...this.handles.values()].some(
+                  (handle) =>
+                    handle.sandbox?.policyRevision === this.policyRevision &&
+                    handle.service.info.status === 'started'
+                ),
+              workspacePath: config.workspacePath,
+              policyRevision: this.policyRevision
+            }
+          }
+        : {})
+    }
   }
 
   private setState(value: Partial<RuntimeState>): void {
     Object.assign(this.state, value)
-    this.changed({ ...this.state })
+    this.changed(this.snapshot())
   }
 
   private environment(): NodeJS.ProcessEnv {
@@ -73,7 +118,11 @@ export class OpenTerminal {
 
   destination(id: string, path: string, websocket: boolean): RelayDestination {
     const handle = this.handles.get(id)
-    if (!handle || handle.service.info.status !== 'started')
+    if (
+      !handle ||
+      handle.service.info.status !== 'started' ||
+      (this.getConfig().sandbox.enabled && handle.sandbox?.policyRevision !== this.policyRevision)
+    )
       throw new Error('Open Terminal is unavailable')
     const url = new URL(path, handle.url)
     if (/^\/(?:admin|api\/admin|notebooks)(?:\/|$)/.test(decodeURIComponent(url.pathname)))
@@ -96,14 +145,17 @@ export class OpenTerminal {
   }
 
   async restart(): Promise<void> {
+    this.policyRevision++
     await Promise.all([...this.services.values()].map((service) => service.stop()))
     await Promise.all(this.cleanups)
+    if (this.cleanupError) throw this.cleanupError
   }
 
   credentials(id: string | null): { url: string; apiKey: string } {
     const status = this.services.get(id)?.info.status
     const handle = this.handles.get(!status || status === 'stopped' ? null : id)
     if (
+      this.getConfig().sandbox.enabled ||
       !this.getConfig().httpEnabled ||
       !handle?.httpUrl ||
       handle.service.info.status !== 'started'
@@ -117,6 +169,8 @@ export class OpenTerminal {
     const stopped = this.runtime.stop()
     await Promise.all([stopped, ...[...this.services.values()].map((service) => service.stop())])
     await this.installation?.catch(() => {})
+    await Promise.all(this.cleanups)
+    if (this.cleanupError) throw this.cleanupError
     if (this.closed) throw new Error('Open Terminal is shutting down')
     this.installation = undefined
     this.runtime = new Runtime('python', (data) => this.append(data))
@@ -128,6 +182,8 @@ export class OpenTerminal {
     const stopped = this.runtime.stop()
     await Promise.all([stopped, ...[...this.services.values()].map((service) => service.stop())])
     await this.installation?.catch(() => {})
+    await Promise.all(this.cleanups)
+    if (this.cleanupError) throw this.cleanupError
     if (this.closed) throw new Error('Open Terminal is shutting down')
     this.installation = undefined
     this.handles.clear()
@@ -147,6 +203,7 @@ export class OpenTerminal {
 
   getStatus(id: string | null): ServiceStatus {
     const status = this.services.get(id)?.info.status
+    if (this.getConfig().sandbox.enabled) return status ?? 'stopped'
     if (status && status !== 'stopped') return status
     return this.services.get(null)?.info.status ?? 'stopped'
   }
@@ -154,8 +211,12 @@ export class OpenTerminal {
   getService(id: string | null): ManagedService {
     let service = this.services.get(id)
     if (!service) {
-      service = new ManagedService((launch) => {
-        const child = spawnPty(launch)
+      service = new ManagedService(async (launch, signal) => {
+        const policy = this.handles.get(id)?.sandbox
+        if (this.getConfig().sandbox.enabled && !policy)
+          throw new SandboxError('Sandbox policy is missing. Open Terminal was not started.')
+        if (policy) await probeSandbox(launch, policy, signal, spawnSandboxed)
+        const child = policy ? await spawnSandboxed(launch, policy, signal) : spawnPty(launch)
         const key = launch.env.OPEN_TERMINAL_API_KEY
         return {
           ...child,
@@ -171,15 +232,16 @@ export class OpenTerminal {
           if (event.info.pid === null && ['stopped', 'failed'].includes(event.info.status)) {
             const handle = this.handles.get(id)
             if (handle) {
-              const cleanup = handle
-                .cleanup()
-                .catch((error) => log.warn('Terminal cleanup failed:', error))
+              const cleanup = handle.cleanup().catch((error) => {
+                this.cleanupError = error instanceof Error ? error : new Error(String(error))
+                log.warn('Terminal cleanup failed:', error)
+              })
               this.cleanups.add(cleanup)
               void cleanup.finally(() => this.cleanups.delete(cleanup))
               this.handles.delete(id)
             }
           }
-          this.changed({ ...this.state })
+          this.changed(this.snapshot())
         }
       })
       if (id !== null) service.append(this.getService(null).logs)
@@ -259,78 +321,151 @@ export class OpenTerminal {
   }
 
   async start(id: string | null, status: (message: string) => void): Promise<TerminalHandle> {
+    if (this.cleanupError)
+      throw new SandboxError(
+        'A previous session could not be cleaned up. Restart Tether before starting another session.'
+      )
     const service = this.getService(id)
-    await service.start(async (signal) => {
-      await this.install(status)
-      signal.throwIfAborted()
-      this.runtime.signal.throwIfAborted()
-      const config = this.getConfig()
-      const host = config.httpEnabled ? config.httpHost : '127.0.0.1'
-      const endpoint = await createTerminalEndpoint({
-        ipc: this.supportsIPC,
-        http: config.httpEnabled || !this.supportsIPC,
-        host
-      })
-      const key = randomBytes(48).toString('base64url')
-      const httpUrl = endpoint.port === undefined ? undefined : 'http://127.0.0.1:' + endpoint.port
-      const url = endpoint.socketPath ? 'http://127.0.0.1' : httpUrl!
-      if (!this.supportsIPC)
-        service.append(
-          `Open Terminal ${this.state.version} does not support IPC; using authenticated HTTP on ${host}.\r\n`
-        )
-      const handle: TerminalHandle = {
-        url,
-        socketPath: endpoint.socketPath,
-        httpUrl,
-        cleanup: endpoint.cleanup,
-        key,
-        capabilities: {},
-        service,
-        stop: () => service.stop()
-      }
-      this.handles.set(id, handle)
-      return {
-        file: this.runtime.executable,
-        args: [
-          '-m',
-          'open_terminal',
-          'run',
-          '--isolated',
-          ...(endpoint.socketPath ? ['--ipc', endpoint.socketPath] : []),
-          ...(endpoint.port === undefined ? [] : ['--port', String(endpoint.port), '--host', host]),
-          '--cors-allowed-origins',
-          ''
-        ],
-        cwd: config.homeDirectory || homedir(),
-        env: Object.fromEntries(
-          Object.entries({
-            ...this.environment(),
-            ...config.env,
-            OPEN_TERMINAL_ISOLATED: 'true',
-            OPEN_TERMINAL_API_KEY: key,
-            OPEN_TERMINAL_ENABLE_NOTEBOOKS: 'false',
-            OPEN_TERMINAL_MULTI_USER: 'false',
-            OPEN_TERMINAL_CORS_ALLOWED_ORIGINS: '',
-            OPEN_TERMINAL_LOG_DIR: join(app.getPath('logs'), 'terminal', id ?? 'local')
-          }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
-        ),
-        url: httpUrl,
-        ready: (signal) =>
-          waitForReady(
-            async (signal) => {
-              await readTerminalJSON(handle, '/files/cwd', key, signal)
-              const discovery = (await readTerminalJSON(handle, '/api/config', key, signal)) as {
-                features?: Record<string, boolean>
-              }
-              handle.capabilities = { files: true, ...discovery.features }
-              return true
-            },
-            signal,
-            20000,
-            200
+    const revision = this.policyRevision
+    try {
+      await service.start(async (signal) => {
+        await this.install(status)
+        signal.throwIfAborted()
+        this.runtime.signal.throwIfAborted()
+        const config = this.getConfig()
+        const sandboxEnabled = config.sandbox.enabled
+        const support = sandboxEnabled ? await getSandboxSupport() : undefined
+        if (sandboxEnabled) {
+          this.setState({
+            sandbox: {
+              active: false,
+              support: support!,
+              workspacePath: config.sandbox.workspacePath,
+              policyRevision: revision
+            }
+          })
+          if (!support?.supported || !support.backend)
+            throw new SandboxError(support?.reason || 'Sandboxing is unavailable on this device.')
+          if (!this.supportsIPC)
+            throw new SandboxError(
+              'Update Open Terminal to a version supporting IPC before enabling the sandbox.'
+            )
+        }
+        const host = config.httpEnabled ? config.httpHost : '127.0.0.1'
+        const endpoint = await createTerminalEndpoint({
+          ipc: this.supportsIPC,
+          http: !sandboxEnabled && (config.httpEnabled || !this.supportsIPC),
+          sandbox: sandboxEnabled,
+          host
+        })
+        let sandbox: Awaited<ReturnType<typeof createSandboxPolicy>> | undefined
+        try {
+          if (sandboxEnabled)
+            sandbox = await createSandboxPolicy({
+              backend: support!.backend!,
+              workspacePath: config.sandbox.workspacePath,
+              runtimePath: this.runtime.directory,
+              socketPath: endpoint.socketPath!,
+              forbiddenPaths: sandboxForbiddenPaths(),
+              policyRevision: revision,
+              signal
+            })
+          signal.throwIfAborted()
+          if (revision !== this.policyRevision)
+            throw new SandboxError('Sandbox settings changed during startup.')
+        } catch (error) {
+          await sandbox?.cleanup()
+          await endpoint.cleanup()
+          throw error
+        }
+        const key = randomBytes(48).toString('base64url')
+        const httpUrl =
+          endpoint.port === undefined ? undefined : 'http://127.0.0.1:' + endpoint.port
+        const url = endpoint.socketPath ? 'http://127.0.0.1' : httpUrl!
+        if (!this.supportsIPC)
+          service.append(
+            `Open Terminal ${this.state.version} does not support IPC; using authenticated HTTP on ${host}.\r\n`
           )
+        const handle: TerminalHandle = {
+          url,
+          socketPath: endpoint.socketPath,
+          httpUrl,
+          cleanup: () => (sandbox ? sandbox.cleanup() : endpoint.cleanup()),
+          key,
+          capabilities: {},
+          service,
+          stop: () => service.stop(),
+          sandbox: sandbox?.policy
+        }
+        this.handles.set(id, handle)
+        return {
+          file: this.runtime.executable,
+          args: [
+            ...(sandbox ? ['-I'] : []),
+            '-m',
+            'open_terminal',
+            'run',
+            '--isolated',
+            ...(endpoint.socketPath ? ['--ipc', endpoint.socketPath] : []),
+            ...(endpoint.port === undefined
+              ? []
+              : ['--port', String(endpoint.port), '--host', host]),
+            '--cors-allowed-origins',
+            ''
+          ],
+          cwd: sandbox?.policy.workspacePath || config.homeDirectory || homedir(),
+          env: sandbox
+            ? sandboxEnvironment(sandbox.policy, this.runtime.executable, config.env ?? {}, key)
+            : Object.fromEntries(
+                Object.entries({
+                  ...this.environment(),
+                  ...config.env,
+                  OPEN_TERMINAL_ISOLATED: 'true',
+                  OPEN_TERMINAL_API_KEY: key,
+                  OPEN_TERMINAL_ENABLE_NOTEBOOKS: 'false',
+                  OPEN_TERMINAL_MULTI_USER: 'false',
+                  OPEN_TERMINAL_CORS_ALLOWED_ORIGINS: '',
+                  OPEN_TERMINAL_LOG_DIR: join(app.getPath('logs'), 'terminal', id ?? 'local')
+                }).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+              ),
+          url: httpUrl,
+          ready: (signal) =>
+            waitForReady(
+              async (signal) => {
+                await readTerminalJSON(handle, '/files/cwd', key, signal)
+                const discovery = (await readTerminalJSON(handle, '/api/config', key, signal)) as {
+                  features?: Record<string, boolean>
+                }
+                handle.capabilities = { files: true, ...discovery.features }
+                if (sandbox && (handle.capabilities.browser || handle.capabilities.desktop))
+                  throw new SandboxError(
+                    'Open Terminal did not disable browser and desktop access.'
+                  )
+                return true
+              },
+              signal,
+              20000,
+              200
+            )
+        }
+      })
+    } catch (error) {
+      if (this.getConfig().sandbox.enabled) {
+        const message = error instanceof Error ? error.message : String(error)
+        const support = this.state.sandbox?.support ?? (await getSandboxSupport())
+        this.setState({
+          sandbox: {
+            active: false,
+            support,
+            workspacePath: this.getConfig().sandbox.workspacePath,
+            policyRevision: this.policyRevision,
+            error: message
+          }
+        })
+        throw new SandboxError(message)
       }
-    })
+      throw error
+    }
     return this.handles.get(id)!
   }
 

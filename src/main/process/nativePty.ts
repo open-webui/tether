@@ -15,7 +15,7 @@ export function spawnPty(launch: ServiceLaunch): PtyProcess {
     onData: (callback) => child.onData(callback),
     onExit: (callback) =>
       child.onExit((exit) => {
-        // The PTY leader can exit before its descendants. Retire the whole session.
+        // Retire the process group; a detached macOS descendant can retain its original policy.
         if (process.platform !== 'win32') {
           try {
             process.kill(-child.pid, 'SIGKILL')

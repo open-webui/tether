@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { request } from 'node:http'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
@@ -8,24 +8,30 @@ import { join } from 'node:path'
 export async function createTerminalEndpoint({
   ipc,
   http,
-  host
+  host,
+  sandbox = false
 }: {
   ipc: boolean
   http: boolean
   host: string
+  sandbox?: boolean
 }): Promise<{
   socketPath: string | undefined
   port: number | undefined
   cleanup(): Promise<void>
 }> {
+  if (sandbox && (!ipc || http))
+    throw new Error('Sandboxed terminals require IPC with HTTP disabled.')
   // Keep the Unix socket name short enough for macOS's 104-byte limit.
   const directory =
-    !ipc || process.platform === 'win32' ? undefined : await mkdtemp(join(tmpdir(), 'tt-'))
+    !ipc || process.platform === 'win32'
+      ? undefined
+      : await realpath(await mkdtemp(join(tmpdir(), 'tt-')))
   const socketPath = !ipc
     ? undefined
     : directory
       ? join(directory, 'api')
-      : '\\\\.\\pipe\\tether-' + randomUUID()
+      : '\\\\.\\pipe\\' + (sandbox ? 'LOCAL\\' : '') + 'tether-' + randomUUID()
   const cleanup = (): Promise<void> =>
     directory ? rm(directory, { recursive: true, force: true }) : Promise.resolve()
   try {

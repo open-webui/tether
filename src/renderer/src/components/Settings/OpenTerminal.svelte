@@ -4,6 +4,7 @@
   import { onMount } from 'svelte'
   import { parseLocalServerConfig, type RuntimeState } from '../../../../shared/config'
   import type { ServiceStatus } from '../../../../shared/terminal'
+  import { sandboxConfigChanged, type SandboxConfig } from '../../../../shared/sandbox'
   import NavArrowDownIcon from 'iconoir/icons/nav-arrow-down.svg?raw'
 
   const id = $props.id()
@@ -52,6 +53,13 @@
   let env = $state<{ name: string; value: string }[]>([])
   let advancedOpen = $state(false)
   let restarting = $state(false)
+  let savedSandbox = $state<SandboxConfig>({ enabled: false, workspacePath: '' })
+  let sandboxEnabled = $state(false)
+  let workspacePath = $state('')
+  let sandboxSaving = $state(false)
+  const sandboxDirty = $derived(
+    sandboxConfigChanged(savedSandbox, { enabled: sandboxEnabled, workspacePath })
+  )
   let runtime = $state<RuntimeState>({ version: null, status: '', busy: false, error: '' })
   let loaded = $state(false)
   let installing = $state(false)
@@ -59,7 +67,13 @@
   let error = $state('')
   let saving: Promise<void> = Promise.resolve()
   const busy = $derived(
-    runtime.busy || installing || uninstalling || restarting || transportSaving || !loaded
+    runtime.busy ||
+      installing ||
+      uninstalling ||
+      restarting ||
+      transportSaving ||
+      sandboxSaving ||
+      !loaded
   )
   const capabilities = $derived([
     {
@@ -100,7 +114,7 @@
     saveSettings()
   }
 
-  async function save(): Promise<void> {
+  async function save(sandbox: SandboxConfig = savedSandbox): Promise<void> {
     const entries = env.filter((row) => row.name.trim() || row.value)
     const names = entries.map((row) => row.name.trim().toUpperCase())
     if (new Set(names).size !== names.length)
@@ -113,11 +127,38 @@
         httpEnabled,
         httpHost,
         homeDirectory,
+        sandbox,
         env: Object.fromEntries(entries.map((row) => [row.name.trim(), row.value]))
       })
     }
     saving = saving.catch(() => {}).then(() => window.api.setConfig(config))
     return saving
+  }
+
+  async function chooseWorkspace(): Promise<void> {
+    try {
+      const directory = await window.api.selectDirectory()
+      if (directory !== null) workspacePath = directory
+    } catch (cause) {
+      error = String(cause)
+    }
+  }
+
+  async function applySandbox(): Promise<void> {
+    sandboxSaving = true
+    error = ''
+    try {
+      await save({ enabled: sandboxEnabled, workspacePath })
+      const config = await window.api.getConfig()
+      savedSandbox = config.localServer.sandbox
+      sandboxEnabled = savedSandbox.enabled
+      workspacePath = savedSandbox.workspacePath
+      runtime = await window.api.getRuntimeState()
+    } catch (cause) {
+      error = String(cause).replace(/^Error: /, '')
+    } finally {
+      sandboxSaving = false
+    }
   }
 
   function saveSettings(): void {
@@ -234,6 +275,9 @@
         autoUpdate = config.localServer.autoUpdate
         httpEnabled = config.localServer.httpEnabled
         httpHost = config.localServer.httpHost
+        savedSandbox = config.localServer.sandbox
+        sandboxEnabled = savedSandbox.enabled
+        workspacePath = savedSandbox.workspacePath
         env = Object.entries(config.localServer.env ?? {}).map(([name, value]) => ({ name, value }))
         runtime = state
         loaded = true
@@ -331,6 +375,74 @@
   >
     {$i18n.t('settings.terminal.description')}
   </p>
+  <section class="mt-5" aria-label={$i18n.t('settings.sandbox.title')}>
+    <h3 class="section-label">{$i18n.t('settings.sandbox.title')}</h3>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">{$i18n.t('settings.sandbox.enable')}</div>
+        <p class="setting-description">{$i18n.t('settings.sandbox.description')}</p>
+      </div>
+      <Switch
+        checked={sandboxEnabled}
+        label={$i18n.t('settings.sandbox.enable')}
+        disabled={busy || (!savedSandbox.enabled && runtime.sandbox?.support.supported === false)}
+        onchange={(value) => {
+          sandboxEnabled = value
+        }}
+      />
+    </div>
+    {#if sandboxEnabled || savedSandbox.enabled}
+      <label class="setting-label" for="sandbox-workspace"
+        >{$i18n.t('settings.sandbox.workspace')}</label
+      >
+      <div class="mt-2 flex items-center gap-3">
+        <input
+          id="sandbox-workspace"
+          class="env-input"
+          dir="ltr"
+          bind:value={workspacePath}
+          disabled={busy}
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
+        />
+        <button class="env-action shrink-0" disabled={busy} onclick={chooseWorkspace}
+          >{$i18n.t('common.browse')}</button
+        >
+      </div>
+      <p class="setting-description mt-2">{$i18n.t('settings.sandbox.details')}</p>
+    {/if}
+    {#if runtime.sandbox?.support.supported === false}
+      <p class="setting-description mt-2" role="status">
+        {$i18n.t('settings.sandbox.unavailable')}
+        {runtime.sandbox.support.reason}
+      </p>
+    {:else if savedSandbox.enabled}
+      <p class="setting-description mt-2" role="status">
+        {runtime.sandbox?.error
+          ? $i18n.t('settings.sandbox.failed')
+          : runtime.sandbox?.active
+            ? $i18n.t('settings.sandbox.active')
+            : terminalStatus === 'starting'
+              ? $i18n.t('settings.sandbox.starting')
+              : $i18n.t('settings.sandbox.inactive')}
+      </p>
+      {#if runtime.sandbox?.error}<p class="setting-description mt-2" role="alert">
+          {runtime.sandbox.error}
+        </p>{/if}
+    {/if}
+    {#if sandboxDirty}
+      <p class="setting-description mt-2">{$i18n.t('settings.sandbox.restartNotice')}</p>
+      <p class="setting-description mt-2">{$i18n.t('settings.sandbox.existingProcesses')}</p>
+      <button
+        class="env-action mt-2"
+        disabled={busy || (sandboxEnabled && !workspacePath.trim())}
+        onclick={applySandbox}
+      >
+        {$i18n.t('settings.sandbox.apply')}
+      </button>
+    {/if}
+  </section>
   <section class="mt-5" aria-label={$i18n.t('settings.terminal.tools')}>
     <h3 class="section-label">{$i18n.t('settings.terminal.tools')}</h3>
     {#each capabilities as capability (capability.name)}
@@ -340,9 +452,9 @@
           <p class="setting-description">{capability.description}</p>
         </div>
         <Switch
-          checked={envEnabled(capability.name)}
+          checked={!savedSandbox.enabled && envEnabled(capability.name)}
           label={capability.label}
-          disabled={busy}
+          disabled={busy || savedSandbox.enabled}
           onchange={(value) => setEnv(capability.name, String(value))}
         />
       </div>
@@ -369,7 +481,7 @@
         }}
       />
     </div>
-    {#if envEnabled('OPEN_TERMINAL_ENABLE_BROWSER')}
+    {#if !savedSandbox.enabled && envEnabled('OPEN_TERMINAL_ENABLE_BROWSER')}
       <div class="setting-row">
         <div>
           <label class="setting-label" for="terminal-browser-mode"
@@ -425,7 +537,7 @@
     {/if}
   </section>
   <section class="mt-5" aria-label={$i18n.t('settings.terminal.httpAccess')}>
-    {#if runtime.ipcSupported === false && !httpEnabled}
+    {#if runtime.ipcSupported === false && !httpEnabled && !savedSandbox.enabled}
       <p class="setting-description" role="status">{$i18n.t('settings.terminal.httpFallback')}</p>
     {/if}
     <div class="setting-row">
@@ -434,16 +546,16 @@
         <p class="setting-description">{$i18n.t('settings.terminal.httpAccessDesc')}</p>
       </div>
       <Switch
-        checked={httpEnabled}
+        checked={httpEnabled && !savedSandbox.enabled}
         label={$i18n.t('settings.terminal.httpAccess')}
-        disabled={busy}
+        disabled={busy || savedSandbox.enabled}
         onchange={(value) => {
           httpEnabled = value
           void saveTransport()
         }}
       />
     </div>
-    {#if httpEnabled}
+    {#if httpEnabled && !savedSandbox.enabled}
       <div class="setting-row">
         <label class="setting-label" for="terminal-http-host"
           >{$i18n.t('settings.terminal.httpHost')}</label
@@ -475,81 +587,86 @@
       <p class="setting-description">{$i18n.t('settings.terminal.httpCredentialsDesc')}</p>
     {/if}
   </section>
-  <section class="mt-5" aria-label={$i18n.t('settings.terminal.homeDirectory')}>
-    <h3 class="section-label">{$i18n.t('settings.terminal.files')}</h3>
-    <label for="terminal-home" class="text-[12px] leading-[16px] font-normal"
-      >{$i18n.t('settings.terminal.homeDirectory')}</label
-    >
-    <p class="mt-0.5 text-[11px] leading-[16px] text-[oklch(0.51_0_0)] dark:text-[oklch(0.77_0_0)]">
-      {$i18n.t('settings.terminal.homeDirectoryDesc')}
-    </p>
-    <div class="mt-2 flex items-center gap-3">
-      <input
-        dir="ltr"
-        id="terminal-home"
-        class="env-input"
-        bind:value={homeDirectory}
-        placeholder={defaultHomeDirectory}
-        disabled={busy}
-        spellcheck="false"
-        autocapitalize="off"
-        onchange={saveSettings}
-      />
-      <button class="env-action shrink-0" disabled={busy} onclick={() => chooseDirectory()}
-        >{$i18n.t('common.browse')}</button
+  {#if !savedSandbox.enabled}
+    <section class="mt-5" aria-label={$i18n.t('settings.terminal.homeDirectory')}>
+      <h3 class="section-label">{$i18n.t('settings.terminal.files')}</h3>
+      <label for="terminal-home" class="text-[12px] leading-[16px] font-normal"
+        >{$i18n.t('settings.terminal.homeDirectory')}</label
       >
-    </div>
-    <div class="setting-row mt-3">
-      <div>
-        <label class="setting-label" for="terminal-file-root"
-          >{$i18n.t('settings.terminal.fileRoot')}</label
-        >
-        <p class="setting-description">{$i18n.t('settings.terminal.fileRootDesc')}</p>
-      </div>
-      <div class="select-wrapper">
-        <select
-          id="terminal-file-root"
-          class="env-input setting-select"
-          value={fileRootMode}
-          disabled={busy}
-          onchange={(event) =>
-            setEnv(
-              'OPEN_TERMINAL_FILE_BROWSER_ROOT',
-              event.currentTarget.value === 'custom'
-                ? homeDirectory.trim() || defaultHomeDirectory
-                : event.currentTarget.value
-            )}
-        >
-          <option value="home">{$i18n.t('settings.terminal.homeDirectory')}</option>
-          <option value="filesystem">{$i18n.t('settings.terminal.fileSystem')}</option>
-          <option value="custom">{$i18n.t('settings.terminal.customFolder')}</option>
-        </select>
-        <span aria-hidden="true" class="select-chevron inline-flex [&>svg]:size-full"
-          >{@html NavArrowDownIcon}</span
-        >
-      </div>
-    </div>
-    {#if fileRootMode === 'custom'}
+      <p
+        class="mt-0.5 text-[11px] leading-[16px] text-[oklch(0.51_0_0)] dark:text-[oklch(0.77_0_0)]"
+      >
+        {$i18n.t('settings.terminal.homeDirectoryDesc')}
+      </p>
       <div class="mt-2 flex items-center gap-3">
         <input
           dir="ltr"
+          id="terminal-home"
           class="env-input"
-          aria-label={$i18n.t('settings.terminal.customFolder')}
-          value={fileRoot}
+          bind:value={homeDirectory}
+          placeholder={defaultHomeDirectory}
           disabled={busy}
           spellcheck="false"
           autocapitalize="off"
-          onchange={(event) => setEnv('OPEN_TERMINAL_FILE_BROWSER_ROOT', event.currentTarget.value)}
+          onchange={saveSettings}
         />
-        <button
-          class="env-action shrink-0"
-          disabled={busy}
-          onclick={() => chooseDirectory('OPEN_TERMINAL_FILE_BROWSER_ROOT')}
+        <button class="env-action shrink-0" disabled={busy} onclick={() => chooseDirectory()}
           >{$i18n.t('common.browse')}</button
         >
       </div>
-    {/if}
-  </section>
+      <div class="setting-row mt-3">
+        <div>
+          <label class="setting-label" for="terminal-file-root"
+            >{$i18n.t('settings.terminal.fileRoot')}</label
+          >
+          <p class="setting-description">{$i18n.t('settings.terminal.fileRootDesc')}</p>
+        </div>
+        <div class="select-wrapper">
+          <select
+            id="terminal-file-root"
+            class="env-input setting-select"
+            value={fileRootMode}
+            disabled={busy}
+            onchange={(event) =>
+              setEnv(
+                'OPEN_TERMINAL_FILE_BROWSER_ROOT',
+                event.currentTarget.value === 'custom'
+                  ? homeDirectory.trim() || defaultHomeDirectory
+                  : event.currentTarget.value
+              )}
+          >
+            <option value="home">{$i18n.t('settings.terminal.homeDirectory')}</option>
+            <option value="filesystem">{$i18n.t('settings.terminal.fileSystem')}</option>
+            <option value="custom">{$i18n.t('settings.terminal.customFolder')}</option>
+          </select>
+          <span aria-hidden="true" class="select-chevron inline-flex [&>svg]:size-full"
+            >{@html NavArrowDownIcon}</span
+          >
+        </div>
+      </div>
+      {#if fileRootMode === 'custom'}
+        <div class="mt-2 flex items-center gap-3">
+          <input
+            dir="ltr"
+            class="env-input"
+            aria-label={$i18n.t('settings.terminal.customFolder')}
+            value={fileRoot}
+            disabled={busy}
+            spellcheck="false"
+            autocapitalize="off"
+            onchange={(event) =>
+              setEnv('OPEN_TERMINAL_FILE_BROWSER_ROOT', event.currentTarget.value)}
+          />
+          <button
+            class="env-action shrink-0"
+            disabled={busy}
+            onclick={() => chooseDirectory('OPEN_TERMINAL_FILE_BROWSER_ROOT')}
+            >{$i18n.t('common.browse')}</button
+          >
+        </div>
+      {/if}
+    </section>
+  {/if}
   <div class="pt-[16px]">
     <button
       class="inline-flex max-w-full shrink-0 items-center justify-center gap-[6px] whitespace-nowrap border-none bg-transparent p-0 text-[12px] leading-[16px] text-[oklch(0.69_0_0)] transition-colors duration-150 hover:text-[oklch(0.2_0_0)] disabled:cursor-not-allowed disabled:opacity-50 dark:hover:text-white [&>span[aria-hidden]]:size-[12px]"
