@@ -79,6 +79,8 @@ snap:
 appImage:
   artifactName: ${name}_${arch}.${ext}
 flatpak:
+  # Override linux.files globs: Flatpak expects [source, destination] pairs.
+  files: []
   base: org.electronjs.Electron2.BaseApp
   baseVersion: '25.08'
   runtime: org.freedesktop.Platform
