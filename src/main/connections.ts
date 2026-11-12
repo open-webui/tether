@@ -1146,6 +1146,10 @@ export class Connections {
     }
   }
 
+  probeRelays(): void {
+    for (const local of this.local.values()) local.relay?.probe()
+  }
+
   async reset(): Promise<void> {
     await this.stop()
     for (const view of this.views.values()) {

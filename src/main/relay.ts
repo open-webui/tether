@@ -8,7 +8,14 @@ import { connectionSession, connectionTLS } from './network'
 import { accessHeaders } from './access'
 
 const CHUNK = 64 * 1024
-const WINDOW = 2 * 1024 * 1024
+// ~40 MB/s per stream at 100 ms round trip. Buffers fill only while a reader falls behind.
+const WINDOW = 4 * 1024 * 1024
+const MAX_CONCURRENT_STREAMS = 64
+// Streams × window: the most a fully stalled device could hold.
+const BUFFER_BUDGET = MAX_CONCURRENT_STREAMS * WINDOW
+// WebUIs that do not state a stream limit allow 16.
+const DEFAULT_CONCURRENT_STREAMS = 16
+const MAX_PENDING_SENDS = 256
 const MAX_MESSAGE = 16 * 1024 * 1024
 
 interface Packet {
@@ -84,6 +91,9 @@ export class Relay {
   private delay = 1000
   private buffered = 0
   private queuedOutput = 0
+  private maxConcurrentStreams = DEFAULT_CONCURRENT_STREAMS
+  private sendWaiters: (() => void)[] = []
+  private connecting = false
 
   constructor(
     private connection: Connection,
@@ -123,7 +133,14 @@ export class Relay {
   }
 
   async connect(): Promise<void> {
-    if (this.stopped) return
+    if (
+      this.stopped ||
+      this.connecting ||
+      this.socket?.readyState === WebSocket.CONNECTING ||
+      this.socket?.readyState === WebSocket.OPEN
+    )
+      return
+    this.connecting = true
     try {
       const access = await this.sessions.refresh(this.connection.id)
       if (!access || !this.sessions.credential(this.connection.id)?.sessionId || this.stopped)
@@ -147,6 +164,7 @@ export class Relay {
             type: 'hello',
             version: 2,
             window: WINDOW,
+            max_concurrent_streams: MAX_CONCURRENT_STREAMS,
             notifications: true,
             token: access.token,
             connection_id: this.connection.id,
@@ -164,6 +182,11 @@ export class Relay {
               if (!Number.isSafeInteger(window) || window < CHUNK || window > WINDOW)
                 throw new Error('Invalid relay window')
               this.window = window
+              const streams = control.max_concurrent_streams
+              this.maxConcurrentStreams =
+                Number.isSafeInteger(streams) && streams >= 1
+                  ? Math.min(streams, MAX_CONCURRENT_STREAMS)
+                  : DEFAULT_CONCURRENT_STREAMS
               this.connected = true
               this.notifications = control.notifications === true
               this.delay = 1000
@@ -198,7 +221,36 @@ export class Relay {
       })
     } catch {
       if (!this.stopped) this.schedule()
+    } finally {
+      this.connecting = false
     }
+  }
+
+  // After sleep or a network change: confirm the socket is alive, or reconnect now instead of
+  // waiting out the heartbeat and backoff.
+  probe(): void {
+    if (this.stopped) return
+    const socket = this.socket
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+      clearTimeout(this.retry)
+      this.delay = 1000
+      void this.connect()
+      return
+    }
+    if (socket.readyState !== WebSocket.OPEN) return
+    let answered = false
+    const pong = (): void => {
+      answered = true
+    }
+    socket.once('pong', pong)
+    socket.ping()
+    setTimeout(() => {
+      socket.off('pong', pong)
+      if (!answered && this.socket === socket && socket.readyState === WebSocket.OPEN) {
+        this.delay = 1000
+        socket.terminate()
+      }
+    }, 5000)
   }
 
   private schedule(): void {
@@ -206,7 +258,8 @@ export class Relay {
     this.notifications = false
     this.status('Local connection unavailable. Reconnecting.')
     clearTimeout(this.retry)
-    this.retry = setTimeout(() => void this.connect(), this.delay)
+    // Jitter keeps devices from reconnecting in lockstep after a WebUI restart.
+    this.retry = setTimeout(() => void this.connect(), this.delay * (0.5 + Math.random()))
     this.delay = Math.min(30000, this.delay * 2)
   }
 
@@ -231,13 +284,16 @@ export class Relay {
       if (stream.closed) throw new Error('Stream closed')
       stream.outputCredit -= data.length
     }
+    // Wait for a slot instead of dropping every stream when many are sending at once.
+    if (this.pendingSends >= MAX_PENDING_SENDS || this.sendWaiters.length)
+      await new Promise<void>((resolve) => this.sendWaiters.push(resolve))
     const socket = this.socket
-    if (!socket || socket.readyState !== WebSocket.OPEN) throw new Error('Relay disconnected')
-    const packet = encode({ ...fields, type, stream: id, sequence: stream.outputSequence++ }, data)
-    if (this.pendingSends >= 64) {
-      socket.terminate()
-      throw new Error('Relay send queue full')
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      this.sendWaiters.shift()?.()
+      throw new Error('Relay disconnected')
     }
+    // Numbered only once queued, so sequence order always matches send order.
+    const packet = encode({ ...fields, type, stream: id, sequence: stream.outputSequence++ }, data)
     this.pendingSends++
     // Each producer awaits one chunk; a shared FIFO gives other streams a turn.
     const sent = this.output.then(async () => {
@@ -251,7 +307,14 @@ export class Relay {
       await sent
     } finally {
       this.pendingSends--
+      this.sendWaiters.shift()?.()
     }
+  }
+
+  // The WebUI accepts an error at sequence 0 for any stream it opened.
+  private reject(id: string, message: string): void {
+    if (this.socket?.readyState === WebSocket.OPEN)
+      this.socket.send(encode({ type: 'error', stream: id, sequence: 0, message }))
   }
 
   private async chunks(id: string, data: Buffer, kind?: string): Promise<void> {
@@ -264,8 +327,12 @@ export class Relay {
   private receive(header: Packet, data: Buffer): void {
     let stream = this.streams.get(header.stream)
     if (header.type === 'http-open' || header.type === 'ws-open') {
-      if (stream || this.streams.size >= 16 || header.sequence !== 0)
-        throw new Error('Invalid stream')
+      if (stream || header.sequence !== 0) throw new Error('Invalid stream')
+      // A full device refuses this one operation; the other streams keep running.
+      if (this.streams.size >= this.maxConcurrentStreams) {
+        this.reject(header.stream, 'Tether has too many active operations.')
+        return
+      }
       stream = {
         service: typeof header.service === 'string' ? header.service : '',
         inputSequence: 0,
@@ -280,7 +347,12 @@ export class Relay {
       this.streams.set(header.stream, stream)
     }
     if (!stream) return // A cancellation may race buffered replies.
-    if (header.sequence !== stream.inputSequence++) throw new Error('Relay sequence gap')
+    if (header.sequence !== stream.inputSequence++) {
+      // Fail only the stream whose frames went missing.
+      void this.send(header.stream, 'error', { message: 'Relay sequence gap' }).catch(() => {})
+      this.closeStream(header.stream)
+      return
+    }
     if (header.type === 'window') {
       const credit = Number(header.bytes)
       if (
@@ -300,7 +372,7 @@ export class Relay {
     if (data.length > stream.inputCredit) throw new Error('Receive window exceeded')
     stream.inputCredit -= data.length
     this.buffered += data.length
-    if (this.buffered > 32 * 1024 * 1024) throw new Error('Relay buffer limit exceeded')
+    if (this.buffered > BUFFER_BUDGET) throw new Error('Relay buffer limit exceeded')
     const current = stream
     current.chain = current.chain
       .then(async () => {
@@ -401,7 +473,15 @@ export class Relay {
               status: response.statusCode,
               headers: responseHeaders
             })
-            for await (const chunk of response) await this.chunks(header.stream, Buffer.from(chunk))
+            for await (const chunk of response) {
+              // Send what arrived while the last chunk waited for credit as one frame, so token
+              // streams don't flood the WebUI with tiny frames. chunks() splits anything over 64 KB.
+              const rest = response.read() as Buffer | null
+              await this.chunks(
+                header.stream,
+                rest ? Buffer.concat([chunk, rest]) : Buffer.from(chunk)
+              )
+            }
             await this.send(header.stream, 'end')
             this.closeStream(header.stream)
           })().catch(async () => {
@@ -440,7 +520,7 @@ export class Relay {
         if (stream.closed) return
         socket.pause()
         const message = Buffer.from(data as Buffer)
-        if (queuedMessages >= 64 || this.queuedOutput + message.length > 32 * 1024 * 1024) {
+        if (queuedMessages >= 64 || this.queuedOutput + message.length > BUFFER_BUDGET) {
           void this.send(header.stream, 'error', {
             message: 'Local output backlog exceeded.'
           }).catch(() => {})

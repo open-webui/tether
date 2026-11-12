@@ -9,6 +9,7 @@ import {
   nativeImage,
   nativeTheme,
   Notification,
+  powerMonitor,
   screen,
   shell,
   Tray
@@ -566,6 +567,9 @@ if (!app.requestSingleInstanceLock()) {
       electronApp.setAppUserModelId('com.openwebui.tether')
       app.dock?.setIcon(icon)
       await connections.initialize()
+      // A socket that slept through a network change looks open until the heartbeat notices.
+      powerMonitor.on('resume', () => connections.probeRelays())
+      powerMonitor.on('unlock-screen', () => connections.probeRelays())
       nativeTheme.themeSource = connections.store.general.theme
       spotlight.initialize()
       for (const key of shortcutKeys) {
