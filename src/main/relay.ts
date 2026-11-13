@@ -1,4 +1,5 @@
 import { request as httpRequest, type ClientRequest } from 'node:http'
+import { request as httpsRequest } from 'node:https'
 import { once } from 'node:events'
 import { connect } from 'node:net'
 import WebSocket from 'ws'
@@ -6,6 +7,7 @@ import type { Sessions } from './sessions'
 import { endpoint, type Connection } from '../shared/connections'
 import { connectionSession, connectionTLS } from './network'
 import { accessHeaders } from './access'
+import type { UserConnection } from '../shared/userConnections'
 
 const CHUNK = 64 * 1024
 // ~40 MB/s per stream at 100 ms round trip. Buffers fill only while a reader falls behind.
@@ -53,6 +55,8 @@ function decode(packet: Buffer): { header: Packet; data: Buffer } {
 
 export interface RelayDestination {
   url: string
+  // Replaces the requested path, e.g. to add the destination's base path. Must stay on `url`'s origin.
+  path?: string
   socketPath?: string
   headers?: Record<string, string>
   firstMessage?: (data: Buffer, kind: string) => Buffer
@@ -100,8 +104,16 @@ export class Relay {
     private sessions: Sessions,
     private status: (message: string) => void,
     private getName: () => string,
-    private notify: (payload: unknown) => void = () => {}
+    private notify: (payload: unknown) => void = () => {},
+    // The user's own connections, each also offered as a service of the same name.
+    private getConnections: () => (Pick<UserConnection, 'name' | 'type'> & {
+      service: string
+    })[] = () => []
   ) {}
+
+  serviceNames(): string[] {
+    return [...this.destinations.keys()]
+  }
 
   setService(name: string, resolve?: ResolveDestination): void {
     if (!/^[a-z][a-z0-9_]{0,31}$/.test(name)) throw new Error('Invalid service name')
@@ -127,6 +139,7 @@ export class Relay {
         JSON.stringify({
           type: 'services',
           services: [...this.destinations.keys()],
+          connections: this.getConnections(),
           name: this.getName()
         })
       )
@@ -169,7 +182,8 @@ export class Relay {
             token: access.token,
             connection_id: this.connection.id,
             name: this.getName(),
-            services: [...this.destinations.keys()]
+            services: [...this.destinations.keys()],
+            connections: this.getConnections()
           })
         )
       )
@@ -433,14 +447,9 @@ export class Relay {
     if (!resolve) throw new Error('Local service unavailable')
     const destination = resolve(header.path, header.type === 'ws-open')
     const base = new URL(destination.url)
-    if (
-      base.protocol !== 'http:' ||
-      !['127.0.0.1', '[::1]'].includes(base.hostname) ||
-      base.username ||
-      base.password
-    )
+    if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password)
       throw new Error('Invalid local destination')
-    const url = new URL(header.path, base)
+    const url = new URL(destination.path ?? header.path, base)
     if (url.origin !== base.origin) throw new Error('Forbidden local path')
     stream.firstMessage = destination.firstMessage
     if (typeof header.query === 'string' && header.query) url.search = header.query
@@ -459,7 +468,7 @@ export class Relay {
       const method = String(header.method).toUpperCase()
       if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(method))
         throw new Error('Invalid method')
-      const request = httpRequest(
+      const request = (url.protocol === 'https:' ? httpsRequest : httpRequest)(
         url,
         { method, headers, socketPath: destination.socketPath, agent: false },
         (response) => {
@@ -500,7 +509,7 @@ export class Relay {
       })
       request.setTimeout(300000, () => request.destroy(new Error('Local request timed out')))
     } else {
-      url.protocol = 'ws:'
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       const socket = new WebSocket(url, {
         ...(destination.socketPath
           ? { createConnection: () => connect(destination.socketPath!) }

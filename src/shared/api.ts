@@ -2,6 +2,7 @@ import type { AppConfig, RuntimeState } from './config'
 import type { ConnectionState } from './connections'
 import type { TerminalTarget, TerminalOutput } from './terminal'
 import type { UpdateState } from './updater'
+import type { UserConnectionInfo, UserConnectionInput } from './userConnections'
 
 export interface AppInfo {
   deviceName: string
@@ -56,6 +57,12 @@ export interface TetherAPI {
   reloadConnection: () => Promise<void>
   removeConnection: (id: string) => Promise<void>
   onConnectionState: (callback: (state: ConnectionState) => void) => () => void
+  listUserConnections: () => Promise<UserConnectionInfo[]>
+  saveUserConnection: (
+    id: string | null,
+    input: UserConnectionInput
+  ) => Promise<UserConnectionInfo[]>
+  removeUserConnection: (id: string) => Promise<UserConnectionInfo[]>
   resetApp: () => Promise<void>
   getAppInfo: () => Promise<AppInfo>
   getUpdateState: () => Promise<UpdateState>

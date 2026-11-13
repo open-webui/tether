@@ -33,6 +33,35 @@ export interface TerminalHandle {
   sandbox?: SandboxPolicy
 }
 
+// Shared by the built-in terminal and the user's own Open Terminal connections.
+export function openTerminalDestination(
+  origin: string,
+  key: string,
+  path: string,
+  websocket: boolean,
+  socketPath?: string
+): RelayDestination {
+  const url = new URL(path, origin)
+  if (/^\/(?:admin|api\/admin|notebooks)(?:\/|$)/.test(decodeURIComponent(url.pathname)))
+    throw new Error('Forbidden terminal path')
+  if (!key) return { url: origin, socketPath }
+  return {
+    url: origin,
+    socketPath,
+    headers: { Authorization: 'Bearer ' + key },
+    ...(websocket && !url.pathname.startsWith('/browser/view/')
+      ? {
+          firstMessage: (data: Buffer, kind: string): Buffer => {
+            if (kind !== 'text') throw new Error('Expected terminal authentication')
+            const auth = JSON.parse(data.toString())
+            if (auth.type !== 'auth') throw new Error('Expected terminal authentication')
+            return Buffer.from(JSON.stringify({ ...auth, token: key }))
+          }
+        }
+      : {})
+  }
+}
+
 export class OpenTerminal {
   private closed = false
   private installation?: Promise<void>
@@ -126,24 +155,7 @@ export class OpenTerminal {
       (this.getConfig().sandbox.enabled && handle.sandbox?.policyRevision !== this.policyRevision)
     )
       throw new Error('Open Terminal is unavailable')
-    const url = new URL(path, handle.url)
-    if (/^\/(?:admin|api\/admin|notebooks)(?:\/|$)/.test(decodeURIComponent(url.pathname)))
-      throw new Error('Forbidden terminal path')
-    return {
-      url: handle.url,
-      socketPath: handle.socketPath,
-      headers: { Authorization: 'Bearer ' + handle.key },
-      ...(websocket && !url.pathname.startsWith('/browser/view/')
-        ? {
-            firstMessage: (data: Buffer, kind: string): Buffer => {
-              if (kind !== 'text') throw new Error('Expected terminal authentication')
-              const auth = JSON.parse(data.toString())
-              if (auth.type !== 'auth') throw new Error('Expected terminal authentication')
-              return Buffer.from(JSON.stringify({ ...auth, token: handle.key }))
-            }
-          }
-        : {})
-    }
+    return openTerminalDestination(handle.url, handle.key, path, websocket, handle.socketPath)
   }
 
   async restart(): Promise<void> {
@@ -290,10 +302,18 @@ export class OpenTerminal {
     const config = this.getConfig()
     const installed = await this.runtime.getPackageVersion('open-terminal')
     const marker = join(this.runtime.directory, '.install-incomplete')
-    const repair = await access(marker).then(
-      () => true,
-      () => false
-    )
+    const repair =
+      (await access(marker).then(
+        () => true,
+        () => false
+      )) ||
+      (!!installed &&
+        (await this.runtime
+          .execute(['-m', 'open_terminal', 'run', '--help'], this.environment())
+          .then(
+            () => false,
+            () => true
+          )))
     if (
       update ||
       repair ||
@@ -305,7 +325,6 @@ export class OpenTerminal {
       status(installed ? t('terminal.updating') : t('terminal.installing'))
       await this.runtime.installPackage('open-terminal', config.version, repair, status)
       await this.runtime.execute(['-c', 'import open_terminal, uvicorn'], this.environment())
-      await rm(marker, { force: true })
     }
     const version = await this.runtime.getPackageVersion('open-terminal')
     this.setState({ version })
@@ -319,6 +338,7 @@ export class OpenTerminal {
       )
     }
     this.supportsIPC = stdout.includes('--ipc')
+    await rm(marker, { force: true })
     this.setState({ ipcSupported: this.supportsIPC })
   }
 

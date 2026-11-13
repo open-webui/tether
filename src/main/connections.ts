@@ -30,12 +30,19 @@ import { attachTerminal } from './process/terminalChannel'
 import { Sessions } from './sessions'
 import { connectionSession, validateConnection } from './network'
 import { accessCookies, accessHeaders, isAccessLogin } from './access'
-import { OpenTerminal, type TerminalHandle } from './terminal'
-import { Relay } from './relay'
+import { OpenTerminal, openTerminalDestination, type TerminalHandle } from './terminal'
+import { Relay, type RelayDestination } from './relay'
 import { Store } from './store'
 import type { GeneralConfig, RuntimeState } from '../shared/config'
 import { attachContextMenu } from './contextMenu'
 import { validateEvent, type TetherEvent } from '../shared/events'
+import {
+  parseUserConnection,
+  parseUserConnectionKey,
+  type UserConnection,
+  type UserConnectionInfo,
+  type UserConnectionInput
+} from '../shared/userConnections'
 
 interface LocalConnection {
   relay?: Relay
@@ -427,6 +434,44 @@ export class Connections {
     ipcMain.handle('connections:list', (event) => {
       this.shellSender(event)
       return this.state()
+    })
+    ipcMain.handle('userConnections:list', (event) => {
+      this.shellSender(event)
+      return this.userConnections()
+    })
+    ipcMain.handle(
+      'userConnections:save',
+      async (event, id: string | null, input: UserConnectionInput) => {
+        this.shellSender(event)
+        if (!input || typeof input !== 'object') throw new Error('Invalid connection')
+        if (id !== null && !this.store.userConnections.some((item) => item.id === id))
+          throw new Error('Unknown connection')
+        const connection = parseUserConnection({
+          id: id ?? randomUUID().replace(/-/g, '').slice(0, 24),
+          name: input.name,
+          type: input.type,
+          url: input.url,
+          enabled: input.enabled
+        })
+        const key = input.key === undefined ? undefined : parseUserConnectionKey(input.key)
+        await this.saveUserConnections(
+          id === null
+            ? [...this.store.userConnections, connection]
+            : this.store.userConnections.map((item) => (item.id === id ? connection : item)),
+          key === undefined ? undefined : { id: connection.id, key }
+        )
+        return this.userConnections()
+      }
+    )
+    ipcMain.handle('userConnections:remove', async (event, id: string) => {
+      this.shellSender(event)
+      if (!this.store.userConnections.some((item) => item.id === id))
+        throw new Error('Unknown connection')
+      await this.saveUserConnections(
+        this.store.userConnections.filter((item) => item.id !== id),
+        { id, key: '' }
+      )
+      return this.userConnections()
     })
     ipcMain.handle(
       'connections:add',
@@ -1012,6 +1057,90 @@ export class Connections {
     notification.show()
   }
 
+  private userConnections(): UserConnectionInfo[] {
+    return this.store.userConnections.map((item) => ({
+      ...item,
+      hasKey: !!this.store.connectionKeys[item.id]
+    }))
+  }
+
+  private async saveUserConnections(
+    connections: UserConnection[],
+    change?: { id: string; key: string }
+  ): Promise<void> {
+    if (connections.filter((item) => item.enabled).length > 15)
+      throw new Error('Turn off a connection first. At most 15 can be on at once.')
+    const previous = this.store.userConnections
+    const previousKeys = this.store.connectionKeys
+    this.store.userConnections = connections
+    if (change) {
+      const keys = { ...previousKeys }
+      if (change.key) keys[change.id] = change.key
+      else delete keys[change.id]
+      this.store.connectionKeys = keys
+    }
+    try {
+      await this.store.saveConfig()
+      if (change) await this.store.saveConnectionKeys()
+    } catch (error) {
+      this.store.userConnections = previous
+      this.store.connectionKeys = previousKeys
+      throw error
+    }
+    for (const entry of this.local.values()) this.applyUserConnections(entry)
+  }
+
+  // At most 15: a relay allows 16 services and the built-in terminal takes one.
+  private enabledUserConnections(): UserConnection[] {
+    return this.store.userConnections.filter((item) => item.enabled).slice(0, 15)
+  }
+
+  // One relay service per enabled connection, like the built-in terminal. setService closes a
+  // service's open streams, so it runs only when a connection is added, removed or toggled.
+  private applyUserConnections(entry: LocalConnection): void {
+    const relay = entry.relay
+    if (!relay) return
+    const wanted = new Set(this.enabledUserConnections().map((item) => 'c_' + item.id))
+    let changed = false
+    for (const name of relay.serviceNames()) {
+      if (name.startsWith('c_') && !wanted.has(name)) {
+        relay.setService(name)
+        changed = true
+      }
+    }
+    for (const name of wanted) {
+      if (!relay.serviceNames().includes(name)) {
+        const id = name.slice(2)
+        relay.setService(name, (path, websocket) =>
+          this.userConnectionDestination(id, path, websocket)
+        )
+        changed = true
+      }
+    }
+    // Renames and URL or type edits only change the announced list.
+    if (!changed) relay.updateName()
+  }
+
+  // Reads the URL and key on each request, so edits apply without interrupting open streams.
+  private userConnectionDestination(
+    id: string,
+    path: string,
+    websocket: boolean
+  ): RelayDestination {
+    const connection = this.enabledUserConnections().find((item) => item.id === id)
+    if (!connection) throw new Error('Unknown connection')
+    const base = new URL(connection.url)
+    const target = base.pathname.replace(/\/+$/, '') + path
+    const key = this.store.connectionKeys[connection.id] ?? ''
+    if (connection.type === 'terminal')
+      return { ...openTerminalDestination(base.origin, key, target, websocket), path: target }
+    return {
+      url: base.origin,
+      path: target,
+      headers: key ? { Authorization: 'Bearer ' + key } : {}
+    }
+  }
+
   private async ensureLocal(id: string): Promise<void> {
     if (this.stopped || this.local.has(id) || !this.sessions.credential(id)?.sessionId) return
     const connection = this.store.connections.find((item) => item.id === id)
@@ -1052,8 +1181,15 @@ export class Connections {
           this.localChanged(id, entry)
         },
         () => this.store.effectiveDeviceName,
-        (payload) => this.showNotification(id, payload)
+        (payload) => this.showNotification(id, payload),
+        () =>
+          this.enabledUserConnections().map(({ id, name, type }) => ({
+            service: 'c_' + id,
+            name,
+            type
+          }))
       )
+      this.applyUserConnections(entry)
       await entry.relay.connect()
       void this.startTerminal(id, entry)
     } catch (error) {

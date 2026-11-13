@@ -9,6 +9,8 @@
   import TerminalIcon from 'iconoir/icons/terminal.svg?raw'
   import BugIcon from 'iconoir/icons/bug.svg?raw'
   import OpenTerminal from './Settings/OpenTerminal.svelte'
+  import Connections from './Settings/Connections.svelte'
+  import ServerConnectionIcon from 'iconoir/icons/server-connection.svg?raw'
   import General from './Settings/General.svelte'
   import SettingsIcon from 'iconoir/icons/settings.svg?raw'
   import About from './Settings/About.svelte'
@@ -43,6 +45,13 @@
         $i18n.t('settings.sandbox.workspace'),
         '127.0.0.1 0.0.0.0'
       ].join(' ')
+    },
+    {
+      id: 'connections',
+      label: $i18n.t('settings.tabs.connections'),
+      icon: ServerConnectionIcon,
+      group: $i18n.t('settings.groups.services'),
+      keywords: $i18n.t('settings.connections.searchTerms')
     },
     {
       id: 'about',
@@ -211,6 +220,8 @@
               <General />
             {:else if settingsTab === 'terminal'}
               <OpenTerminal {terminalStatus} />
+            {:else if settingsTab === 'connections'}
+              <Connections />
             {:else}
               <About />
             {/if}
