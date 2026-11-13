@@ -84,7 +84,6 @@ const api: TetherAPI = {
   listUserConnections: () => ipcRenderer.invoke('userConnections:list'),
   saveUserConnection: (id, input) => ipcRenderer.invoke('userConnections:save', id, input),
   removeUserConnection: (id) => ipcRenderer.invoke('userConnections:remove', id),
-  verifyUserConnection: (input) => ipcRenderer.invoke('userConnections:verify', input),
   resetApp: () => ipcRenderer.invoke('app:reset'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   getUpdateState: () => ipcRenderer.invoke('update:state'),

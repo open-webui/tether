@@ -35,20 +35,6 @@
       keywords: $i18n.t('settings.general.searchTerms')
     },
     {
-      id: 'terminal',
-      label: 'Open Terminal',
-      icon: TerminalIcon,
-      group: $i18n.t('settings.groups.services'),
-      keywords: [
-        $i18n.t('settings.terminal.searchTerms'),
-        $i18n.t('settings.terminal.httpAccess'),
-        $i18n.t('settings.terminal.httpHost'),
-        $i18n.t('settings.sandbox.title'),
-        $i18n.t('settings.sandbox.workspace'),
-        '127.0.0.1 0.0.0.0'
-      ].join(' ')
-    },
-    {
       id: 'models',
       label: $i18n.t('settings.tabs.models'),
       icon: CpuIcon,
@@ -61,6 +47,20 @@
       icon: PuzzleIcon,
       group: $i18n.t('settings.groups.services'),
       keywords: $i18n.t('settings.integrations.searchTerms')
+    },
+    {
+      id: 'terminal',
+      label: 'Open Terminal',
+      icon: TerminalIcon,
+      group: $i18n.t('settings.groups.services'),
+      keywords: [
+        $i18n.t('settings.terminal.searchTerms'),
+        $i18n.t('settings.terminal.httpAccess'),
+        $i18n.t('settings.terminal.httpHost'),
+        $i18n.t('settings.sandbox.title'),
+        $i18n.t('settings.sandbox.workspace'),
+        '127.0.0.1 0.0.0.0'
+      ].join(' ')
     },
     {
       id: 'about',

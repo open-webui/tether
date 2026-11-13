@@ -1,5 +1,5 @@
 import { t } from './i18n'
-import { app } from 'electron'
+import { app, session } from 'electron'
 import log from 'electron-log'
 import { spawn, execFile, type ChildProcess } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
@@ -205,6 +205,7 @@ export class Runtime {
         'uv',
         'pip',
         'install',
+        '--native-tls',
         '--python',
         this.executable,
         ...(reinstall ? ['--reinstall', '--no-cache'] : []),
@@ -291,7 +292,24 @@ export class Runtime {
 
   private async download(url: string, archive: string, checksum: string): Promise<void> {
     try {
-      const response = await fetch(url, { signal: this.signal })
+      const profile = session.fromPartition('runtime-downloads')
+      const proxyRules = ['http', 'https']
+        .map((protocol) => {
+          const proxy =
+            process.env[protocol + '_proxy'] ||
+            process.env[protocol.toUpperCase() + '_PROXY'] ||
+            process.env.all_proxy ||
+            process.env.ALL_PROXY
+          return proxy ? `${protocol}=${proxy}` : ''
+        })
+        .filter(Boolean)
+        .join(';')
+      if (proxyRules)
+        await profile.setProxy({
+          proxyRules,
+          proxyBypassRules: process.env.no_proxy || process.env.NO_PROXY
+        })
+      const response = await profile.fetch(url, { signal: this.signal })
       if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`.trim())
       if (!response.body) throw new Error('Response has no body.')
       const hash = createHash('sha256')

@@ -44,6 +44,7 @@ import { attachContextMenu } from './contextMenu'
 // Keep Electron's storage and encryption identity stable across display-name changes.
 app.setName('Tether')
 const connections = new Connections((theme) => saveConfig({ theme }, false))
+if (app.isPackaged) log.transports.console.level = false
 log.initialize()
 log.errorHandler.startCatching()
 

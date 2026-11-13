@@ -38,12 +38,8 @@ import { attachContextMenu } from './contextMenu'
 import { validateEvent, type TetherEvent } from '../shared/events'
 import {
   parseUserConnection,
-  normalizeUserConnectionURL,
   parseUserConnectionKey,
-  userConnectionCheckPaths,
-  userConnectionTypes,
   type UserConnection,
-  type UserConnectionCheck,
   type UserConnectionInfo,
   type UserConnectionInput
 } from '../shared/userConnections'
@@ -465,26 +461,6 @@ export class Connections {
           key === undefined ? undefined : { id: connection.id, key }
         )
         return this.userConnections()
-      }
-    )
-    ipcMain.handle(
-      'userConnections:verify',
-      (event, input: { type: unknown; url: unknown; key?: unknown; id?: unknown }) => {
-        this.shellSender(event)
-        if (!input || !userConnectionTypes.includes(input.type as UserConnection['type']))
-          throw new Error('Invalid connection')
-        // A blank key while editing means the saved one.
-        const key =
-          input.key === undefined || input.key === ''
-            ? typeof input.id === 'string'
-              ? (this.store.connectionKeys[input.id] ?? '')
-              : ''
-            : parseUserConnectionKey(input.key)
-        return this.verifyUserConnection(
-          input.type as UserConnection['type'],
-          normalizeUserConnectionURL(input.url),
-          key
-        )
       }
     )
     ipcMain.handle('userConnections:remove', async (event, id: string) => {
@@ -1112,44 +1088,6 @@ export class Connections {
       throw error
     }
     for (const entry of this.local.values()) this.applyUserConnections(entry)
-  }
-
-  // Runs here rather than in the page, so the server needs no CORS setup.
-  private async verifyUserConnection(
-    type: UserConnection['type'],
-    url: string,
-    key: string
-  ): Promise<UserConnectionCheck> {
-    let response: Response
-    try {
-      response = await fetch(url + userConnectionCheckPaths[type], {
-        headers: key ? { Authorization: 'Bearer ' + key } : {},
-        // Never follow: a redirect elsewhere would carry the key along.
-        redirect: 'manual',
-        signal: AbortSignal.timeout(10000)
-      })
-    } catch (error) {
-      return {
-        ok: false,
-        error: (error as Error).name === 'TimeoutError' ? 'timeout' : 'unreachable'
-      }
-    }
-    const status = response.status
-    if (!response.ok) {
-      await response.body?.cancel()
-      if (status >= 300 && status < 400) return { ok: false, error: 'redirect', status }
-      if (status === 401 || status === 403) return { ok: false, error: 'unauthorized', status }
-      if (status === 404) return { ok: false, error: 'notFound', status }
-      return { ok: false, error: 'http', status }
-    }
-    const body = await response.json().catch(() => null)
-    if (!body || typeof body !== 'object') return { ok: false, error: 'invalid' }
-    if (type === 'openai') {
-      if (!Array.isArray(body.data)) return { ok: false, error: 'invalid' }
-      return { ok: true, models: body.data.length }
-    }
-    if (type === 'openapi' && !body.openapi && !body.swagger) return { ok: false, error: 'invalid' }
-    return { ok: true }
   }
 
   // At most 15: a relay allows 16 services and the built-in terminal takes one.
