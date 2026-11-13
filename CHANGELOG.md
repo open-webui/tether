@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-11-13
+
+### Added
+
+- **Connect your own models, tools, and terminals.** Requires Open WebUI 0.13.4 or later. Settings → Integrations lets you add Ollama, LM Studio, other OpenAI-compatible model servers, OpenAPI tools, and Open Terminal servers running in Docker or on another computer. Enter a name, address, and optional key, then turn each connection on or off. Enabled connections are available to your connected Open WebUIs. Keys stay on your computer and are saved securely when secure storage is available.
+
+### Fixed
+
+- **Cloudflare sign-in no longer closes before login finishes.** Tether keeps the sign-in window open through Cloudflare's intermediate pages and preserves the login state needed to return from providers such as Microsoft Entra ID and Authentik.
+- **Broken Open Terminal installations are repaired automatically.** Tether checks whether an existing installation can start and reinstalls missing or broken packages with fresh downloads. A failed repair is retried on the next start instead of being treated as complete. This addresses the reported Windows startup failures with Open Terminal 0.17.7 and earlier versions.
+- **Open Terminal setup respects corporate network settings.** Python and Node downloads now use the system's network settings, including configured proxies, while honoring proxy environment variables and bypass rules. Python package installation also uses certificates trusted by the operating system.
+- **Windows sandbox startup can find its installed files.** Fixed the missing-library error that prevented the workspace sandbox from starting in the installed Windows app, before it could check whether the device supports sandboxing.
+- **Restarting a Linux launcher no longer triggers repeated logging error dialogs.** Installed builds keep writing log files without trying to write to a console that has closed.
+- **Local connections recover sooner after sleep or screen unlock.** Tether checks whether the connection is still alive and reconnects when it has stopped responding.
+- **Running several operations at once no longer disconnects everything when the connection gets busy.** Tether queues outgoing work and refuses only a new operation when the active-operation limit is reached. A missing message in one operation also leaves the others connected. Compatible Open WebUIs can now run up to 64 operations at once.
+
 ## [0.1.13] - 2026-11-09
 
 ### Added
