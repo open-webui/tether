@@ -1,10 +1,19 @@
 import { app } from 'electron'
 import { access, constants } from 'node:fs/promises'
+import { join } from 'node:path'
 import type { SandboxSupport } from '../../shared/sandbox'
 import type { PtyProcess, ServiceLaunch } from '../process/managedService'
 import { spawnPty } from '../process/nativePty'
 import { seatbeltLaunch } from './seatbelt'
 import { SandboxError, verifyWorkspace, type SandboxPolicy } from './policy'
+
+// Native library loaders cannot resolve Electron's virtual ASAR paths.
+if (process.platform === 'win32' && app.isPackaged)
+  process.env.MXC_FFI_DIR = join(
+    process.resourcesPath,
+    'app.asar.unpacked/node_modules/@microsoft/mxc-sdk/bin',
+    process.arch
+  )
 
 export function sandboxForbiddenPaths(): string[] {
   return [app.getPath('userData'), app.getAppPath(), process.resourcesPath]

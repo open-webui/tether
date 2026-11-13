@@ -9,9 +9,7 @@
   import TerminalIcon from 'iconoir/icons/terminal.svg?raw'
   import BugIcon from 'iconoir/icons/bug.svg?raw'
   import OpenTerminal from './Settings/OpenTerminal.svelte'
-  import Models from './Settings/Models.svelte'
   import Integrations from './Settings/Integrations.svelte'
-  import CpuIcon from 'iconoir/icons/cpu.svg?raw'
   import PuzzleIcon from 'iconoir/icons/puzzle.svg?raw'
   import General from './Settings/General.svelte'
   import SettingsIcon from 'iconoir/icons/settings.svg?raw'
@@ -33,13 +31,6 @@
       icon: SettingsIcon,
       group: null,
       keywords: $i18n.t('settings.general.searchTerms')
-    },
-    {
-      id: 'models',
-      label: $i18n.t('settings.tabs.models'),
-      icon: CpuIcon,
-      group: $i18n.t('settings.groups.services'),
-      keywords: $i18n.t('settings.models.searchTerms')
     },
     {
       id: 'integrations',
@@ -229,8 +220,6 @@
               <General />
             {:else if settingsTab === 'terminal'}
               <OpenTerminal {terminalStatus} />
-            {:else if settingsTab === 'models'}
-              <Models />
             {:else if settingsTab === 'integrations'}
               <Integrations />
             {:else}
