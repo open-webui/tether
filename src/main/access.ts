@@ -76,7 +76,11 @@ export async function signInToAccess(
       )
       popup.webContents.on('did-create-window', attach)
       popup.webContents.on('did-navigate', (_event, url) => {
-        if (belongsToConnection(url, connection.url)) finish()
+        if (
+          belongsToConnection(url, connection.url) &&
+          !/^\/cdn-cgi\/access(?:\/|$)/.test(new URL(url).pathname)
+        )
+          finish()
       })
       popup.webContents.on('did-fail-load', (_event, code, description, _url, mainFrame) => {
         if (mainFrame && code !== -3) finish(new Error(description))
@@ -84,7 +88,8 @@ export async function signInToAccess(
     }
     attach(window)
     window.on('closed', () => finish(new Error('Access sign-in cancelled.')))
-    void window.loadURL(address).catch((error) => {
+    // Start in this session so Access's login state and callback cookies stay together.
+    void window.loadURL(connection.url).catch((error) => {
       if (error.code !== 'ERR_ABORTED') finish(error)
     })
   })

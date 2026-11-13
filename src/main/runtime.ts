@@ -207,7 +207,7 @@ export class Runtime {
         'install',
         '--python',
         this.executable,
-        ...(reinstall ? ['--reinstall'] : []),
+        ...(reinstall ? ['--reinstall', '--no-cache'] : []),
         ...(version ? [name + '==' + version] : [name, '--upgrade'])
       ],
       status

@@ -310,6 +310,7 @@ export class OpenTerminal {
       (!!installed &&
         (await this.runtime
           .execute(['-m', 'open_terminal', 'run', '--help'], this.environment())
+          .then(() => this.runtime.execute(['-c', 'import fastapi'], this.environment()))
           .then(
             () => false,
             () => true
@@ -324,7 +325,10 @@ export class OpenTerminal {
       await writeFile(marker, '', { mode: 0o600 })
       status(installed ? t('terminal.updating') : t('terminal.installing'))
       await this.runtime.installPackage('open-terminal', config.version, repair, status)
-      await this.runtime.execute(['-c', 'import open_terminal, uvicorn'], this.environment())
+      await this.runtime.execute(
+        ['-c', 'import open_terminal, uvicorn, fastapi'],
+        this.environment()
+      )
     }
     const version = await this.runtime.getPackageVersion('open-terminal')
     this.setState({ version })

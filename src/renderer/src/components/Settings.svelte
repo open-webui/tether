@@ -9,8 +9,10 @@
   import TerminalIcon from 'iconoir/icons/terminal.svg?raw'
   import BugIcon from 'iconoir/icons/bug.svg?raw'
   import OpenTerminal from './Settings/OpenTerminal.svelte'
-  import Connections from './Settings/Connections.svelte'
-  import ServerConnectionIcon from 'iconoir/icons/server-connection.svg?raw'
+  import Models from './Settings/Models.svelte'
+  import Integrations from './Settings/Integrations.svelte'
+  import CpuIcon from 'iconoir/icons/cpu.svg?raw'
+  import PuzzleIcon from 'iconoir/icons/puzzle.svg?raw'
   import General from './Settings/General.svelte'
   import SettingsIcon from 'iconoir/icons/settings.svg?raw'
   import About from './Settings/About.svelte'
@@ -47,11 +49,18 @@
       ].join(' ')
     },
     {
-      id: 'connections',
-      label: $i18n.t('settings.tabs.connections'),
-      icon: ServerConnectionIcon,
+      id: 'models',
+      label: $i18n.t('settings.tabs.models'),
+      icon: CpuIcon,
       group: $i18n.t('settings.groups.services'),
-      keywords: $i18n.t('settings.connections.searchTerms')
+      keywords: $i18n.t('settings.models.searchTerms')
+    },
+    {
+      id: 'integrations',
+      label: $i18n.t('settings.tabs.integrations'),
+      icon: PuzzleIcon,
+      group: $i18n.t('settings.groups.services'),
+      keywords: $i18n.t('settings.integrations.searchTerms')
     },
     {
       id: 'about',
@@ -220,8 +229,10 @@
               <General />
             {:else if settingsTab === 'terminal'}
               <OpenTerminal {terminalStatus} />
-            {:else if settingsTab === 'connections'}
-              <Connections />
+            {:else if settingsTab === 'models'}
+              <Models />
+            {:else if settingsTab === 'integrations'}
+              <Integrations />
             {:else}
               <About />
             {/if}

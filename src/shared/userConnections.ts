@@ -15,6 +15,29 @@ export interface UserConnectionInfo extends UserConnection {
   hasKey: boolean
 }
 
+// The result of trying a connection from this computer. Errors are codes so the UI can explain them.
+export type UserConnectionCheck =
+  | { ok: true; models?: number }
+  | {
+      ok: false
+      error:
+        | 'unreachable'
+        | 'timeout'
+        | 'unauthorized'
+        | 'notFound'
+        | 'redirect'
+        | 'invalid'
+        | 'http'
+      status?: number
+    }
+
+// What each type answers when it is working.
+export const userConnectionCheckPaths: Record<UserConnectionType, string> = {
+  openai: '/models',
+  openapi: '/openapi.json',
+  terminal: '/api/config'
+}
+
 // `key` left out keeps the saved key; an empty string removes it.
 export type UserConnectionInput = Omit<UserConnection, 'id'> & { key?: string }
 
