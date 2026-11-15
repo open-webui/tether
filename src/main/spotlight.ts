@@ -36,7 +36,7 @@ export class Spotlight {
   constructor(
     private connections: Connections,
     private showMain: () => void,
-    private hideMain: () => void
+    private hideMain: () => Promise<boolean>
   ) {}
 
   initialize(): void {
@@ -98,6 +98,8 @@ export class Spotlight {
         alwaysOnTop: true,
         skipTaskbar: true,
         resizable: false,
+        fullscreenable: false,
+        hiddenInMissionControl: true,
         hasShadow: false,
         webPreferences: {
           preload: join(__dirname, '../preload/spotlight.js'),
@@ -139,12 +141,13 @@ export class Spotlight {
     }
     if (this.stopped) return
     const window = this.window!
-    this.hideMain()
+    const generation = ++this.generation
+    if (!(await this.hideMain())) return
+    if (this.stopped || window.isDestroyed() || generation !== this.generation) return
     this.display = this.useScreenPicker
       ? screen.getPrimaryDisplay()
       : screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
     this.snapshot = undefined
-    this.generation++
     window.setBounds(this.display.bounds)
     const store = this.connections.store
     const init: SpotlightInit = {
@@ -159,7 +162,7 @@ export class Spotlight {
         : '',
       useScreenPicker: this.useScreenPicker
     }
-    if (this.stopped || window.isDestroyed()) return
+    if (this.stopped || window.isDestroyed() || generation !== this.generation) return
     this.openedAt = Date.now()
     window.show()
     window.focus()

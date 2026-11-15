@@ -40,6 +40,7 @@ import { Connections } from './connections'
 import { Spotlight } from './spotlight'
 import { setTooltip } from './tooltip'
 import { attachContextMenu } from './contextMenu'
+import { cancelWindowHide, hideWindow } from './windowVisibility'
 
 // Keep Electron's storage and encryption identity stable across display-name changes.
 app.setName('Tether')
@@ -75,7 +76,9 @@ let shutdownStarted = false
 let resetting = false
 const registeredShortcuts = { globalShortcut: '', spotlightShortcut: '' }
 const shortcutKeys = ['globalShortcut', 'spotlightShortcut'] as const
-const spotlight = new Spotlight(connections, showMainWindow, () => mainWindow?.hide())
+const spotlight = new Spotlight(connections, showMainWindow, () =>
+  mainWindow ? hideWindow(mainWindow) : Promise.resolve(true)
+)
 const openSpotlight = (): void => {
   void spotlight.toggle().catch((error) => log.warn('Could not open Spotlight:', error))
 }
@@ -84,6 +87,7 @@ let saveWindowState: () => Promise<void> = () => Promise.resolve()
 
 function showMainWindow(): void {
   if (!mainWindow) createMainWindow()
+  if (mainWindow) cancelWindowHide(mainWindow)
   if (mainWindow?.isMinimized()) mainWindow.restore()
   mainWindow?.show()
   mainWindow?.webContents.send('window:visibility', true)
@@ -194,8 +198,7 @@ function createMainWindow(show = true): void {
     if (!quitting) {
       event.preventDefault()
       if (connections.store.general.runInBackground) {
-        window.hide()
-        visibilityChanged()
+        void hideWindow(window).catch((error) => log.warn('Could not hide Tether:', error))
       } else app.quit()
     }
   })
