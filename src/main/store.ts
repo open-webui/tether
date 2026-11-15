@@ -12,7 +12,8 @@ import {
   type GeneralConfig,
   type LocalServerConfig
 } from '../shared/config'
-import { normalizeURL, type Connection } from '../shared/connections'
+import { connectionInfo, normalizeURL, type Connection } from '../shared/connections'
+import { parseConnectionHeaders } from '../shared/connectionHeaders'
 import { parseUserConnection, type UserConnection } from '../shared/userConnections'
 
 export interface Credential {
@@ -119,6 +120,19 @@ export class Store {
     }
     if (!this.persistentCredentials) return
     try {
+      const encrypted = await readFile(join(this.directory, 'connection-headers.enc'))
+      const decrypted = await safeStorage.decryptStringAsync(encrypted)
+      const values = JSON.parse(decrypted.result)
+      for (const connection of this.connections) {
+        const value = values[connection.id]
+        if (value?.url === connection.url)
+          connection.headers = parseConnectionHeaders(value.headers)
+      }
+      if (decrypted.shouldReEncrypt) await this.saveConnectionHeaders()
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    try {
       const encrypted = await readFile(join(this.directory, 'credentials.enc'))
       const decrypted = await safeStorage.decryptStringAsync(encrypted)
       const values = JSON.parse(decrypted.result)
@@ -175,7 +189,7 @@ export class Store {
   saveConfig(): Promise<void> {
     const value = JSON.stringify({
       ...this.general,
-      connections: this.connections,
+      connections: this.connections.map(connectionInfo),
       selected: this.selected,
       localServer: this.localServer,
       userConnections: this.userConnections
@@ -184,6 +198,18 @@ export class Store {
   }
 
   // Without secure storage, keys last until Tether quits, like sign-ins.
+  saveConnectionHeaders(): Promise<void> {
+    if (!this.persistentCredentials) return Promise.resolve()
+    const value = JSON.stringify(
+      Object.fromEntries(
+        this.connections
+          .filter((connection) => Object.keys(connection.headers ?? {}).length)
+          .map(({ id, url, headers }) => [id, { url, headers }])
+      )
+    )
+    return this.write('connection-headers.enc', () => safeStorage.encryptStringAsync(value))
+  }
+
   saveConnectionKeys(): Promise<void> {
     if (!this.persistentCredentials) return Promise.resolve()
     const value = JSON.stringify(this.connectionKeys)

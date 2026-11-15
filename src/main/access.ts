@@ -1,5 +1,19 @@
 import { BrowserWindow, type Session } from 'electron'
 import { belongsToConnection, type Connection } from '../shared/connections'
+import { connectionHeaders } from '../shared/connectionHeaders'
+
+export function configureAccessHeaders(profile: Session, connection: Connection): void {
+  const scoped = { ...connection, headers: { ...connection.headers } }
+  const names = new Set(Object.keys(scoped.headers))
+  if (!names.size) return
+  profile.webRequest.onBeforeSendHeaders((details, callback) => {
+    // Redirects can carry custom headers forward, so strip them before reapplying the scope.
+    const headers = Object.fromEntries(
+      Object.entries(details.requestHeaders).filter(([name]) => !names.has(name.toLowerCase()))
+    )
+    callback({ requestHeaders: { ...headers, ...connectionHeaders(scoped, details.url) } })
+  })
+}
 
 export function isAccessLogin(address: string, connectionURL: string): boolean {
   try {
@@ -23,12 +37,16 @@ export async function accessCookies(profile: Session, url: string): Promise<Elec
 
 export async function accessHeaders(
   profile: Session,
-  url: string
+  url: string,
+  connection: Connection
 ): Promise<Record<string, string>> {
   const cookies = await accessCookies(profile, url)
-  return cookies.length
-    ? { Cookie: cookies.map(({ name, value }) => `${name}=${value}`).join('; ') }
-    : {}
+  return {
+    ...connectionHeaders(connection, url),
+    ...(cookies.length
+      ? { Cookie: cookies.map(({ name, value }) => `${name}=${value}`).join('; ') }
+      : {})
+  }
 }
 
 export async function signInToAccess(

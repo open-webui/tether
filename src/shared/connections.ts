@@ -7,6 +7,19 @@ export interface Connection {
   name: string
   url: string
   trustedCertificate?: string
+  // Kept separately from config.json in encrypted storage.
+  headers?: Record<string, string>
+}
+
+export interface ConnectionInput {
+  name: string
+  url: string
+  headers?: Record<string, string>
+}
+
+export function connectionInfo(connection: Connection): Connection {
+  const { id, name, url, trustedCertificate } = connection
+  return { id, name, url, trustedCertificate }
 }
 
 export interface ConnectionState {

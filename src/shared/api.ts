@@ -1,5 +1,5 @@
 import type { AppConfig, RuntimeState } from './config'
-import type { ConnectionState } from './connections'
+import type { ConnectionInput, ConnectionState } from './connections'
 import type { TerminalTarget, TerminalOutput } from './terminal'
 import type { UpdateState } from './updater'
 import type { UserConnectionInfo, UserConnectionInput } from './userConnections'
@@ -47,12 +47,11 @@ export interface TetherAPI {
   copyTerminalCredentials: () => Promise<void>
   onRuntimeState: (callback: (state: RuntimeState) => void) => () => void
   listConnections: () => Promise<ConnectionState>
-  addConnection: (input: {
-    name: string
-    url: string
-    installTerminal?: boolean
-  }) => Promise<ConnectionState>
-  updateConnection: (id: string, input: { name: string; url: string }) => Promise<ConnectionState>
+  addConnection: (
+    input: ConnectionInput & { installTerminal?: boolean }
+  ) => Promise<ConnectionState>
+  updateConnection: (id: string, input: ConnectionInput) => Promise<ConnectionState>
+  getConnectionHeaders: (id: string) => Promise<Record<string, string>>
   selectConnection: (id: string | null) => Promise<void>
   reloadConnection: () => Promise<void>
   removeConnection: (id: string) => Promise<void>

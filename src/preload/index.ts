@@ -71,6 +71,7 @@ const api: TetherAPI = {
   },
   listConnections: () => ipcRenderer.invoke('connections:list'),
   addConnection: (input) => ipcRenderer.invoke('connections:add', input),
+  getConnectionHeaders: (id) => ipcRenderer.invoke('connections:headers', id),
   selectDirectory: () => ipcRenderer.invoke('dialog:directory'),
   updateConnection: (id, input) => ipcRenderer.invoke('connections:update', id, input),
   selectConnection: (id) => ipcRenderer.invoke('connections:select', id),

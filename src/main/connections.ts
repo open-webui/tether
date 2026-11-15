@@ -16,12 +16,15 @@ import { randomUUID } from 'node:crypto'
 import {
   belongsToConnection,
   connectionRedirectError,
+  connectionInfo,
   endpoint,
   normalizeURL,
   type AccessToken,
   type Connection,
+  type ConnectionInput,
   type ConnectionState
 } from '../shared/connections'
+import { parseConnectionHeaders } from '../shared/connectionHeaders'
 import { homedir } from 'node:os'
 import type { TerminalTarget } from '../shared/terminal'
 import { ManagedService } from './process/managedService'
@@ -203,7 +206,7 @@ export class Connections {
     const selected = this.store.connections.find((item) => item.id === this.store.selected)
     const local = selected && this.local.get(selected.id)
     return {
-      connections: this.store.connections,
+      connections: this.store.connections.map(connectionInfo),
       selected: this.store.selected,
       terminalStatus: this.terminal.getStatus(this.store.selected),
       webuiConnected: Boolean(
@@ -475,7 +478,7 @@ export class Connections {
     })
     ipcMain.handle(
       'connections:add',
-      async (event, input: { name: string; url: string; installTerminal?: boolean }) => {
+      async (event, input: ConnectionInput & { installTerminal?: boolean }) => {
         this.shellSender(event)
         if (
           !input ||
@@ -489,10 +492,18 @@ export class Connections {
         const connection = await validateConnection({
           id: randomUUID(),
           name: input.name.trim() || new URL(input.url.trim()).host,
-          url: input.url
+          url: input.url,
+          headers: parseConnectionHeaders(input.headers)
         })
         this.store.connections.push(connection)
-        await this.store.saveConfig()
+        try {
+          await this.store.saveConnectionHeaders()
+          await this.store.saveConfig()
+        } catch (error) {
+          this.store.connections = this.store.connections.filter((item) => item !== connection)
+          await this.store.saveConnectionHeaders().catch(() => {})
+          throw error
+        }
         await this.select(connection.id)
         if (input.installTerminal) {
           void this.installTerminal().catch((error) => {
@@ -503,59 +514,66 @@ export class Connections {
         return this.state()
       }
     )
-    ipcMain.handle(
-      'connections:update',
-      async (event, id: string, input: { name: string; url: string }) => {
-        this.shellSender(event)
-        const connection = this.store.connections.find((item) => item.id === id)
-        if (!connection) throw new Error('Unknown connection')
-        if (
-          !input ||
-          typeof input.url !== 'string' ||
-          typeof input.name !== 'string' ||
-          input.name.length > 100
-        )
-          throw new Error('Invalid connection')
-        const url = normalizeURL(input.url.trim())
-        const updated = await validateConnection({
-          ...connection,
-          url,
-          trustedCertificate: url === connection.url ? connection.trustedCertificate : undefined
-        })
-        if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
-        const previous = { ...connection }
-        if (
-          url !== connection.url ||
-          updated.trustedCertificate !== connection.trustedCertificate
-        ) {
-          // Validation may have just signed in to Access in the profile we are clearing.
-          const cookies = await accessCookies(
-            connectionSession(updated),
-            endpoint(url, 'api/config')
-          )
-          await this.clearConnection(id)
-          for (const cookie of cookies)
-            await connectionSession(updated).cookies.set({
-              ...cookie,
-              url: endpoint(url, 'api/config'),
-              domain: cookie.hostOnly ? undefined : cookie.domain
-            })
-        }
-        connection.name = input.name.trim() || new URL(url).host
-        connection.url = url
-        connection.trustedCertificate = updated.trustedCertificate
-        try {
-          await this.store.saveConfig()
-        } catch (error) {
-          Object.assign(connection, previous)
-          throw error
-        }
-        if (this.store.selected === id && !this.views.has(id)) this.createView(connection)
-        this.layout()
-        this.emit()
-        return this.state()
+    ipcMain.handle('connections:update', async (event, id: string, input: ConnectionInput) => {
+      this.shellSender(event)
+      const connection = this.store.connections.find((item) => item.id === id)
+      if (!connection) throw new Error('Unknown connection')
+      if (
+        !input ||
+        typeof input.url !== 'string' ||
+        typeof input.name !== 'string' ||
+        input.name.length > 100
+      )
+        throw new Error('Invalid connection')
+      const url = normalizeURL(input.url.trim())
+      const updated = await validateConnection({
+        ...connection,
+        url,
+        headers: parseConnectionHeaders(
+          input.headers === undefined && url === connection.url ? connection.headers : input.headers
+        ),
+        trustedCertificate: url === connection.url ? connection.trustedCertificate : undefined
+      })
+      if (!this.store.connections.includes(connection)) throw new Error('Unknown connection')
+      const previous = { ...connection, headers: connection.headers }
+      if (
+        url !== connection.url ||
+        updated.trustedCertificate !== connection.trustedCertificate ||
+        JSON.stringify(updated.headers) !== JSON.stringify(connection.headers ?? {})
+      ) {
+        // Validation may have just signed in to Access in the profile we are clearing.
+        const cookies = await accessCookies(connectionSession(updated), endpoint(url, 'api/config'))
+        await this.clearConnection(id)
+        for (const cookie of cookies)
+          await connectionSession(updated).cookies.set({
+            ...cookie,
+            url: endpoint(url, 'api/config'),
+            domain: cookie.hostOnly ? undefined : cookie.domain
+          })
       }
-    )
+      connection.name = input.name.trim() || new URL(url).host
+      connection.url = url
+      connection.trustedCertificate = updated.trustedCertificate
+      connection.headers = updated.headers
+      try {
+        await this.store.saveConnectionHeaders()
+        await this.store.saveConfig()
+      } catch (error) {
+        Object.assign(connection, previous)
+        await this.store.saveConnectionHeaders().catch(() => {})
+        throw error
+      }
+      if (this.store.selected === id && !this.views.has(id)) this.createView(connection)
+      this.layout()
+      this.emit()
+      return this.state()
+    })
+    ipcMain.handle('connections:headers', (event, id: string) => {
+      this.shellSender(event)
+      const connection = this.store.connections.find((item) => item.id === id)
+      if (!connection) throw new Error('Unknown connection')
+      return { ...connection.headers }
+    })
     ipcMain.handle('connections:select', async (event, id: string | null) => {
       this.shellSender(event)
       await this.select(id)
@@ -572,6 +590,7 @@ export class Connections {
       this.store.connections = this.store.connections.filter((item) => item.id !== id)
       if (this.store.selected === id) this.store.selected = this.store.connections[0]?.id ?? null
       await this.store.saveConfig()
+      await this.store.saveConnectionHeaders()
       await this.select(this.store.selected)
     })
     ipcMain.handle('tether:isFocused', (event) => {
@@ -1159,7 +1178,8 @@ export class Connections {
           headers: {
             ...(await accessHeaders(
               connectionSession(connection),
-              endpoint(connection.url, 'api/config')
+              endpoint(connection.url, 'api/config'),
+              connection
             )),
             Authorization: 'Bearer ' + access.token
           },

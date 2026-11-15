@@ -13,6 +13,7 @@
   import type { AppInfo } from '../../shared/api'
   import type { GeneralConfig } from '../../shared/config'
   import { normalizeURL, type Connection, type ConnectionState } from '../../shared/connections'
+  import { parseConnectionHeaders } from '../../shared/connectionHeaders'
 
   let state = $state<ConnectionState>({
     connections: [],
@@ -88,6 +89,8 @@
   })
   let name = $state('')
   let url = $state('')
+  let headerRows = $state<{ name: string; value: string }[]>([])
+  let advancedOpen = $state(false)
   let error = $state('')
   let busy = $state(false)
   let removing = $state<string | null>(null)
@@ -119,24 +122,36 @@
   }
 
   async function addConnection(installTerminal = false): Promise<void> {
-    state = await window.api.addConnection({ name, url, installTerminal })
+    state = await window.api.addConnection({ name, url, headers: formHeaders(), installTerminal })
     name = ''
     url = ''
+    headerRows = []
+  }
+
+  function formHeaders(): Record<string, string> {
+    const rows = headerRows.filter((row) => row.name.trim() || row.value.trim())
+    if (new Set(rows.map((row) => row.name.trim().toLowerCase())).size !== rows.length)
+      throw new Error('Use unique HTTP header names.')
+    return parseConnectionHeaders(Object.fromEntries(rows.map((row) => [row.name, row.value])))
   }
 
   function editConnection(connection: Connection): void {
-    editing = connection.id
-    removing = null
-    error = ''
-    name = connection.name
-    url = connection.url
-    addressInput?.focus()
+    void run(async () => {
+      const headers = await window.api.getConnectionHeaders(connection.id)
+      editing = connection.id
+      removing = null
+      name = connection.name
+      url = connection.url
+      headerRows = Object.entries(headers).map(([name, value]) => ({ name, value }))
+      addressInput?.focus()
+    })
   }
 
   function cancelEdit(): void {
     editing = null
     name = ''
     url = ''
+    headerRows = []
     error = ''
   }
 
@@ -334,8 +349,9 @@
             event.preventDefault()
             void run(async () => {
               normalizeURL(url.trim())
+              const headers = formHeaders()
               if (editing) {
-                state = await window.api.updateConnection(editing, { name, url })
+                state = await window.api.updateConnection(editing, { name, url, headers })
                 cancelEdit()
               } else if (state.connections.length === 0 && !openTerminalInstalled)
                 setupDialog.showModal()
@@ -373,6 +389,68 @@
           {#if editing && url.trim() !== state.connections.find((connection) => connection.id === editing)?.url}
             <p class="message">{$i18n.t('connections.addressWarning')}</p>
           {/if}
+          <div class="custom-headers">
+            <button
+              type="button"
+              class="text-button advanced-toggle"
+              aria-expanded={advancedOpen}
+              aria-controls="connection-advanced"
+              onclick={() => (advancedOpen = !advancedOpen)}
+            >
+              <span
+                aria-hidden="true"
+                class="inline-flex size-[12px] shrink-0 items-center justify-center leading-none transition-transform duration-200 [&>svg]:size-full"
+                class:-rotate-90={!advancedOpen && $i18n.dir() !== 'rtl'}
+                class:rotate-90={!advancedOpen && $i18n.dir() === 'rtl'}
+                >{@html NavArrowDownIcon}</span
+              >
+              {$i18n.t('common.advanced')}
+            </button>
+            <div id="connection-advanced" hidden={!advancedOpen}>
+              <p class="message">{$i18n.t('connections.customHeadersDescription')}</p>
+              {#each headerRows as row, index (row)}
+                <div class="header-row">
+                  <input
+                    dir="ltr"
+                    aria-label={$i18n.t('connections.headerName', { number: index + 1 })}
+                    placeholder="P-Access-Token-Id"
+                    autocomplete="off"
+                    spellcheck="false"
+                    autocapitalize="off"
+                    bind:value={row.name}
+                    disabled={busy}
+                  />
+                  <input
+                    dir="ltr"
+                    type="password"
+                    aria-label={$i18n.t('connections.headerValue', { number: index + 1 })}
+                    placeholder={$i18n.t('connections.headerValuePlaceholder')}
+                    autocomplete="off"
+                    bind:value={row.value}
+                    disabled={busy}
+                  />
+                  <button
+                    type="button"
+                    class="text-button inline-flex size-[28px] items-center justify-center"
+                    disabled={busy}
+                    aria-label={$i18n.t('connections.removeHeader', { number: index + 1 })}
+                    onclick={() => (headerRows = headerRows.filter((_, i) => i !== index))}
+                  >
+                    <span aria-hidden="true" class="inline-flex size-[14px] [&>svg]:size-full"
+                      >{@html XmarkIcon}</span
+                    >
+                  </button>
+                </div>
+              {/each}
+              <button
+                type="button"
+                class="text-button add-header"
+                disabled={busy || headerRows.length >= 16}
+                onclick={() => (headerRows = [...headerRows, { name: '', value: '' }])}
+                >{$i18n.t('connections.addHeader')}</button
+              >
+            </div>
+          </div>
           <div class="form-actions">
             {#if editing}
               <button type="button" class="text-button" disabled={busy} onclick={cancelEdit}
@@ -828,6 +906,27 @@
     gap: 16px;
     justify-content: flex-end;
     margin-top: 20px;
+  }
+  .custom-headers {
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  .advanced-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .header-row input {
+    min-width: 0;
+  }
+  .add-header {
+    margin-top: 12px;
   }
   .primary {
     display: inline-flex;

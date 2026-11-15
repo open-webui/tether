@@ -13,7 +13,7 @@ import {
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import type { Connections } from './connections'
-import type { Connection } from '../shared/connections'
+import { connectionInfo, type Connection } from '../shared/connections'
 import { parseGeneralConfig } from '../shared/config'
 import type { SpotlightInit } from '../shared/spotlight'
 import type { TetherEvent } from '../shared/events'
@@ -152,7 +152,7 @@ export class Spotlight {
     const store = this.connections.store
     const init: SpotlightInit = {
       language: store.general.language || app.getLocale(),
-      connections: store.connections,
+      connections: store.connections.map(connectionInfo),
       selected: store.selected,
       width: this.display.bounds.width,
       height: this.display.bounds.height,

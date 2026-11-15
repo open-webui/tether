@@ -159,7 +159,11 @@ export class Relay {
       if (!access || !this.sessions.credential(this.connection.id)?.sessionId || this.stopped)
         return
       const url = new URL(endpoint(this.connection.url, 'api/v1/tether/connect'))
-      const headers = await accessHeaders(connectionSession(this.connection), url.href)
+      const headers = await accessHeaders(
+        connectionSession(this.connection),
+        url.href,
+        this.connection
+      )
       if (this.stopped) return
       url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
       const socket = new WebSocket(url, {

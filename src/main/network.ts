@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { checkServerIdentity, type ConnectionOptions } from 'node:tls'
 import { addAbortSignal, Readable } from 'node:stream'
 import { normalizeURL, validateConnectionURL, type Connection } from '../shared/connections'
-import { accessHeaders, isAccessLogin, signInToAccess } from './access'
+import { accessHeaders, configureAccessHeaders, isAccessLogin, signInToAccess } from './access'
 
 function validCertificate(certificate: X509Certificate, hostname: string): boolean {
   return (
@@ -43,18 +43,23 @@ function configureTrust(
 const configured = new WeakSet<Session>()
 
 export function connectionSession(connection: Connection): Session {
-  // A different trust policy needs a fresh profile: Chromium caches certificate decisions.
-  const suffix = connection.trustedCertificate
-    ? '-' +
-      createHash('sha256')
-        .update(connection.url + connection.trustedCertificate)
-        .digest('hex')
+  // Isolate candidate headers during validation as well as Chromium's cached trust decisions.
+  const headers = Object.keys(connection.headers ?? {}).length
+    ? JSON.stringify(connection.headers)
     : ''
+  const suffix =
+    connection.trustedCertificate || headers
+      ? '-' +
+        createHash('sha256')
+          .update(connection.url + (connection.trustedCertificate ?? '') + headers)
+          .digest('hex')
+      : ''
   const profile = session.fromPath(
     join(app.getPath('userData'), 'profiles', connection.id + suffix)
   )
-  if (connection.trustedCertificate && !configured.has(profile)) {
-    configureTrust(profile, connection)
+  if (!configured.has(profile)) {
+    if (connection.trustedCertificate) configureTrust(profile, connection)
+    configureAccessHeaders(profile, connection)
     configured.add(profile)
   }
   return profile
@@ -91,7 +96,7 @@ export async function validateConnection(connection: Connection): Promise<Connec
             url,
             {
               ...options,
-              headers: await accessHeaders(connectionSession(candidate), url)
+              headers: await accessHeaders(connectionSession(candidate), url, candidate)
             },
             profile
           )

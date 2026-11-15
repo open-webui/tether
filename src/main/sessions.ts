@@ -52,7 +52,11 @@ export class Sessions {
       method: method ?? (body === undefined ? 'GET' : 'POST'),
       credentials: 'omit',
       headers: {
-        ...(await accessHeaders(connectionSession(connection), endpoint(connection.url, path))),
+        ...(await accessHeaders(
+          connectionSession(connection),
+          endpoint(connection.url, path),
+          connection
+        )),
         ...(token ? { Authorization: 'Bearer ' + token } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' })
       },
@@ -228,8 +232,14 @@ export class Sessions {
       throw new Error('This WebUI does not support this sign-in provider.')
     if (
       !config.features?.auth_sessions ||
-      (await accessHeaders(connectionSession(connection), endpoint(connection.url, 'api/config')))
-        .Cookie
+      Object.keys(connection.headers ?? {}).length > 0 ||
+      (
+        await accessHeaders(
+          connectionSession(connection),
+          endpoint(connection.url, 'api/config'),
+          connection
+        )
+      ).Cookie
     )
       return false
     const verifier = randomBytes(32).toString('base64url')
