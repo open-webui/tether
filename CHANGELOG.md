@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-11-15
+
+### Fixed
+
+- **Connect through gateways using custom headers.** Add headers under Advanced when creating or editing a WebUI connection.
+- **Closing a fullscreen Mac window no longer leaves a black Space.** Tether exits fullscreen before hiding to the background or opening Spotlight. Spotlight itself cannot enter native fullscreen and stays out of Mission Control.
+- **Windows sandbox sessions can find their launcher.** MXC executables and libraries are now installed outside the app archive, where the SDK can find and run them on both x64 and ARM64.
+
 ## [0.1.14] - 2026-11-13
 
 ### Added
