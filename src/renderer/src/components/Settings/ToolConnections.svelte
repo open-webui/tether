@@ -291,7 +291,7 @@
             </div>
           {/if}
         {/if}
-        <div class="flex items-center justify-between text-xs">
+        <div class="flex items-center justify-between">
           <span>{$i18n.t('settings.tools.enabled')}</span>
           <Switch
             checked={enabled}

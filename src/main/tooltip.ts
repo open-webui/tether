@@ -57,6 +57,9 @@ export async function setTooltip(owner: BrowserWindow | null, value: unknown): P
       focusable: false,
       skipTaskbar: true,
       resizable: false,
+      // Otherwise macOS can fullscreen this child with its owner, leaving a black Space on hide.
+      fullscreenable: false,
+      hiddenInMissionControl: true,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false }
     })
     popup.setIgnoreMouseEvents(true)
