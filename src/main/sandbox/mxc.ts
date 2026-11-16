@@ -1,7 +1,8 @@
 import { access } from 'node:fs/promises'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import type { PtyProcess, ServiceLaunch } from '../process/managedService'
+import { finished } from 'node:stream/promises'
+import type { PtyExit, PtyProcess, ServiceLaunch } from '../process/managedService'
 import { SandboxError, type SandboxPolicy } from './policy'
 import type { ContainerRequest } from '@microsoft/mxc-sdk/v1'
 
@@ -71,17 +72,30 @@ export async function spawnMxc(launch: ServiceLaunch, policy: SandboxPolicy): Pr
   const input = child.input
   output.setEncoding('utf8')
   output.pause()
-  let exit: { exitCode: number } | undefined
-  const listeners = new Set<(event: { exitCode: number }) => void>()
-  const complete = (exitCode: number): void => {
-    exit = { exitCode }
+  let exit: PtyExit | undefined
+  const listeners = new Set<(event: PtyExit) => void>()
+  const complete = (result: PtyExit): void => {
+    exit = result
     for (const listener of listeners) listener(exit)
     child.dispose()
   }
-  void child.wait().then(
-    (result) => complete(result.exitCode),
-    () => complete(1)
-  )
+  // Deliver buffered diagnostics before exit listeners detach and dispose the PTY.
+  void Promise.allSettled([
+    child.wait(),
+    finished(output, { readable: true, writable: false, cleanup: true })
+  ]).then(([result, drained]) => {
+    const failure = result.status === 'rejected' ? result : drained
+    complete({
+      exitCode: result.status === 'fulfilled' ? result.value.exitCode : 1,
+      ...(failure.status === 'rejected'
+        ? {
+            error: `MXC process failed: ${
+              failure.reason instanceof Error ? failure.reason.message : String(failure.reason)
+            }`
+          }
+        : {})
+    })
+  })
   return {
     pid: child.id,
     onData(callback) {

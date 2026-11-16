@@ -235,7 +235,14 @@ export class OpenTerminal {
         return {
           ...child,
           onData: (callback) =>
-            child.onData((data) => callback(key ? data.replaceAll(key, '[redacted]') : data))
+            child.onData((data) => callback(key ? data.replaceAll(key, '[redacted]') : data)),
+          onExit: (callback) =>
+            child.onExit((exit) =>
+              callback({
+                ...exit,
+                error: key ? exit.error?.replaceAll(key, '[redacted]') : exit.error
+              })
+            )
         }
       })
       service.subscribe((event) => {
@@ -427,6 +434,7 @@ export class OpenTerminal {
         }
         this.handles.set(id, handle)
         return {
+          name: 'Open Terminal',
           file: this.runtime.executable,
           args: [
             ...(sandbox ? ['-I'] : []),

@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { createServer } from 'node:net'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import type { PtyProcess, ServiceLaunch } from '../process/managedService'
+import { describeProcessExit, type PtyProcess, type ServiceLaunch } from '../process/managedService'
 import { SandboxError, type SandboxPolicy } from './policy'
 
 // Verify real enforcement before exposing Open Terminal. This also catches host/OS regressions.
@@ -82,19 +82,20 @@ print(${JSON.stringify(marker)}, flush=True)
       const data = child!.onData((chunk) => {
         output = (output + chunk).slice(-16384)
       })
-      const exit = child!.onExit(({ exitCode }) => {
+      const exit = child!.onExit((result) => {
         exited = true
         resolveExit()
         data.dispose()
         exit.dispose()
         deadline.removeEventListener('abort', abort)
-        if (exitCode === 0 && output.includes(marker)) resolve()
-        else
-          reject(
-            new SandboxError(
-              'Sandbox verification failed. File or network isolation could not be established.'
-            )
-          )
+        if (result.exitCode === 0 && !result.error && output.includes(marker)) resolve()
+        else {
+          const message =
+            'Sandbox verification failed. File or network isolation could not be established.\n' +
+            describeProcessExit('Sandbox verification process', result, output)
+          const key = launch.env.OPEN_TERMINAL_API_KEY
+          reject(new SandboxError(key ? message.replaceAll(key, '[redacted]') : message))
+        }
       })
       deadline.addEventListener('abort', abort, { once: true })
       if (deadline.aborted) abort()

@@ -458,7 +458,10 @@
               ? $i18n.t('settings.sandbox.starting')
               : $i18n.t('settings.sandbox.inactive')}
       </p>
-      {#if runtime.sandbox?.error}<p class="setting-description mt-2" role="alert">
+      {#if runtime.sandbox?.error}<p
+          class="setting-description mt-2 whitespace-pre-wrap break-words select-text"
+          role="alert"
+        >
           {runtime.sandbox.error}
         </p>{/if}
     {/if}
@@ -832,7 +835,7 @@
       {runtime.status}
     </p>{/if}
   {#if error || runtime.error}<p
-      class="mt-2 text-[11px] leading-[16px] text-red-600 dark:text-red-400 break-words select-text"
+      class="mt-2 text-[11px] leading-[16px] text-red-600 dark:text-red-400 whitespace-pre-wrap break-words select-text"
       role="alert"
     >
       {error || runtime.error}

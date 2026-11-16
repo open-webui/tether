@@ -1,22 +1,46 @@
 import { setTimeout as delay } from 'node:timers/promises'
+import { basename } from 'node:path'
+import { stripVTControlCharacters } from 'node:util'
 import type { ServiceInfo } from '../../shared/terminal'
 import { OutputBuffer } from './outputBuffer'
+
+export interface PtyExit {
+  exitCode: number
+  signal?: number
+  error?: string
+}
 
 export interface PtyProcess {
   pid: number
   onData(callback: (data: string) => void): { dispose(): void }
-  onExit(callback: (exit: { exitCode: number; signal?: number }) => void): { dispose(): void }
+  onExit(callback: (exit: PtyExit) => void): { dispose(): void }
   write(data: string): void
   resize(cols: number, rows: number): void
   kill(force: boolean): void | Promise<void>
 }
 export interface ServiceLaunch {
+  name?: string
   file: string
   args: string[]
   env: Record<string, string>
   cwd?: string
   url?: string
   ready?(signal: AbortSignal): Promise<void>
+}
+
+export function describeProcessExit(name: string, exit: PtyExit, output: string): string {
+  const details = [
+    stripVTControlCharacters(exit.error ?? '')
+      .trim()
+      .slice(0, 1024),
+    stripVTControlCharacters(output).trim().slice(-4096)
+  ]
+    .filter(Boolean)
+    .join('\n')
+  return (
+    `${name} exited with code ${exit.exitCode}${exit.signal ? ` (signal ${exit.signal})` : ''}.` +
+    (details ? `\n\n${details}` : ' No diagnostic output was received.')
+  )
 }
 type ServiceEvent =
   | { type: 'state'; info: ServiceInfo }
@@ -128,23 +152,32 @@ export class ManagedService {
           }).dispose
         )
         run.dispose.push(
-          child.onExit(({ exitCode, signal: exitSignal }) => {
+          child.onExit((exit) => {
             if (run.exited) return
+            const { exitCode } = exit
+            const failed =
+              !run.stopRequested &&
+              (exit.error !== undefined || exitCode !== 0 || this.state.status !== 'started')
+            const name = launch.name || basename(launch.file)
+            const message = describeProcessExit(
+              this.state.status === 'starting' ? `${name} startup` : name,
+              exit,
+              this.logs
+            )
             run.exited = true
             run.resolveExit()
-            run.abort.abort(new Error(`Process exited with code ${exitCode}`))
+            run.abort.abort(new Error(message))
             for (const dispose of run.dispose.splice(0)) dispose()
             if (this.run !== run) return
             this.append(
-              `\r\n[Process exited with code ${exitCode}${exitSignal ? ` signal ${exitSignal}` : ''}]\r\n`
+              `\r\n[${name} exited with code ${exitCode}${exit.signal ? ` signal ${exit.signal}` : ''}]\r\n`
             )
-            const failed = !run.stopRequested && (exitCode !== 0 || this.state.status !== 'started')
             this.update({
               pid: null,
               url: null,
               reachable: false,
               status: failed ? 'failed' : 'stopped',
-              error: failed ? `Process exited with code ${exitCode}` : null
+              error: failed ? message : null
             })
           }).dispose
         )
