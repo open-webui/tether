@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-11-16
+
+### Added
+
+- **Use MCP tools from your computer in Open WebUI.** In Settings → Integrations → Tools, choose MCP and connect a server by its web address or launch an installed server with Local command (stdio). New tool connections default to Streamable HTTP and stay off until you enable them. Select the enabled server from Open WebUI's tools menu. This requires an Open WebUI version with Tether MCP support and external tools enabled. Local commands run with your account's access, outside Open Terminal's workspace sandbox. See the [MCP setup guide](docs/mcp.md) for examples.
+
+### Changed
+
+- **Add and edit connections in a separate dialog.** Models, tools, and terminals now have Save and Cancel controls instead of saving each field as you edit it. Tools offers both OpenAPI and MCP. Leave a key blank to keep it, or choose Remove saved key to clear it. Saving an MCP connection closes its current sessions; the next use starts a new connection.
+- **Previously saved integrations must be added again.** Model, tool, and terminal connections saved under Settings → Integrations in 0.1.14 or 0.1.15 are not carried over to the new settings layout. Record their addresses and keys before upgrading, then add them again after the update.
+- **Open Terminal startup errors show what failed.** Errors now identify Open Terminal or the sandbox check and include the available error details and recent output, with readable line breaks and text you can copy. Windows sandbox errors retain details that were previously replaced with only "Process exited with code 1". The remaining Windows sandbox startup failure is not yet confirmed resolved.
+
+### Fixed
+
+- **Tooltips no longer leave black fullscreen Spaces on macOS.** A tooltip could enter fullscreen alongside the main window and leave a black Space when it disappeared. Tooltip windows now stay out of fullscreen and Mission Control, addressing the remaining case reported after 0.1.15.
+
 ## [0.1.15] - 2026-11-15
 
 ### Fixed
