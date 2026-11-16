@@ -1,8 +1,9 @@
+import type { ToolConnectionInfo, ToolConnectionInput } from './toolConnections'
 import type { AppConfig, RuntimeState } from './config'
 import type { ConnectionInput, ConnectionState } from './connections'
 import type { TerminalTarget, TerminalOutput } from './terminal'
 import type { UpdateState } from './updater'
-import type { UserConnectionInfo, UserConnectionInput } from './userConnections'
+import type { ProviderConnectionInfo, ProviderConnectionInput } from './providerConnections'
 
 export interface AppInfo {
   deviceName: string
@@ -56,12 +57,18 @@ export interface TetherAPI {
   reloadConnection: () => Promise<void>
   removeConnection: (id: string) => Promise<void>
   onConnectionState: (callback: (state: ConnectionState) => void) => () => void
-  listUserConnections: () => Promise<UserConnectionInfo[]>
-  saveUserConnection: (
+  listProviderConnections: () => Promise<ProviderConnectionInfo[]>
+  saveProviderConnection: (
     id: string | null,
-    input: UserConnectionInput
-  ) => Promise<UserConnectionInfo[]>
-  removeUserConnection: (id: string) => Promise<UserConnectionInfo[]>
+    input: ProviderConnectionInput
+  ) => Promise<ProviderConnectionInfo[]>
+  removeProviderConnection: (id: string) => Promise<ProviderConnectionInfo[]>
+  listToolConnections: () => Promise<ToolConnectionInfo[]>
+  saveToolConnection: (
+    id: string | null,
+    input: ToolConnectionInput
+  ) => Promise<ToolConnectionInfo[]>
+  removeToolConnection: (id: string) => Promise<ToolConnectionInfo[]>
   resetApp: () => Promise<void>
   getAppInfo: () => Promise<AppInfo>
   getUpdateState: () => Promise<UpdateState>

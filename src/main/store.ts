@@ -14,7 +14,13 @@ import {
 } from '../shared/config'
 import { connectionInfo, normalizeURL, type Connection } from '../shared/connections'
 import { parseConnectionHeaders } from '../shared/connectionHeaders'
-import { parseUserConnection, type UserConnection } from '../shared/userConnections'
+import { parseProviderConnection, type ProviderConnection } from '../shared/providerConnections'
+import {
+  parseToolConnection,
+  parseToolSecrets,
+  type ToolConnection,
+  type ToolSecrets
+} from '../shared/toolConnections'
 
 export interface Credential {
   userId: string
@@ -43,9 +49,11 @@ export class Store {
     httpEnabled: false,
     httpHost: '127.0.0.1'
   }
-  userConnections: UserConnection[] = []
-  // Keys for userConnections, by id. Stored only in the encrypted connection-keys.enc.
+  providerConnections: ProviderConnection[] = []
+  // Keys for providerConnections, by id. Stored only in the encrypted connection-keys.enc.
   connectionKeys: Record<string, string> = {}
+  toolConnections: ToolConnection[] = []
+  toolSecrets: Record<string, ToolSecrets> = {}
   credentials: Record<string, Credential> = {}
   persistentCredentials = false
   private queue: Promise<void> = Promise.resolve()
@@ -101,13 +109,20 @@ export class Store {
       if (new Set(this.connections.map((c) => c.id)).size !== this.connections.length) {
         throw new Error('Duplicate connection identifiers')
       }
-      if (config.userConnections !== undefined) {
-        if (!Array.isArray(config.userConnections))
-          throw new Error('Invalid connection configuration')
-        this.userConnections = config.userConnections.map(parseUserConnection)
-        if (new Set(this.userConnections.map((c) => c.id)).size !== this.userConnections.length)
-          throw new Error('Duplicate connection identifiers')
+      if (config.providerConnections !== undefined) {
+        if (!Array.isArray(config.providerConnections))
+          throw new Error('Invalid provider connection configuration')
+        this.providerConnections = config.providerConnections.map(parseProviderConnection)
       }
+      if (config.toolConnections !== undefined) {
+        if (!Array.isArray(config.toolConnections)) throw new Error('Invalid tool configuration')
+        this.toolConnections = config.toolConnections.map(parseToolConnection)
+      }
+      const serviceIds = [...this.providerConnections, ...this.toolConnections].map(
+        (item) => item.id
+      )
+      if (new Set(serviceIds).size !== serviceIds.length)
+        throw new Error('Duplicate connection identifiers')
       this.selected = this.connections.some((c) => c.id === config.selected)
         ? config.selected
         : null
@@ -150,11 +165,22 @@ export class Store {
       const encrypted = await readFile(join(this.directory, 'connection-keys.enc'))
       const decrypted = await safeStorage.decryptStringAsync(encrypted)
       const values = JSON.parse(decrypted.result)
-      for (const connection of this.userConnections) {
+      for (const connection of this.providerConnections) {
         if (typeof values[connection.id] === 'string')
           this.connectionKeys[connection.id] = values[connection.id]
       }
       if (decrypted.shouldReEncrypt) await this.saveConnectionKeys()
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    try {
+      const encrypted = await readFile(join(this.directory, 'tool-secrets.enc'))
+      const decrypted = await safeStorage.decryptStringAsync(encrypted)
+      const values = JSON.parse(decrypted.result)
+      for (const server of this.toolConnections) {
+        if (values[server.id]) this.toolSecrets[server.id] = parseToolSecrets(values[server.id])
+      }
+      if (decrypted.shouldReEncrypt) await this.saveToolSecrets()
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
     }
@@ -192,7 +218,8 @@ export class Store {
       connections: this.connections.map(connectionInfo),
       selected: this.selected,
       localServer: this.localServer,
-      userConnections: this.userConnections
+      providerConnections: this.providerConnections,
+      toolConnections: this.toolConnections
     })
     return this.write('config.json', async () => value)
   }
@@ -214,6 +241,12 @@ export class Store {
     if (!this.persistentCredentials) return Promise.resolve()
     const value = JSON.stringify(this.connectionKeys)
     return this.write('connection-keys.enc', () => safeStorage.encryptStringAsync(value))
+  }
+
+  saveToolSecrets(): Promise<void> {
+    if (!this.persistentCredentials) return Promise.resolve()
+    const value = JSON.stringify(this.toolSecrets)
+    return this.write('tool-secrets.enc', () => safeStorage.encryptStringAsync(value))
   }
 
   saveCredentials(): Promise<void> {

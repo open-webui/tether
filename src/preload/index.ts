@@ -82,9 +82,12 @@ const api: TetherAPI = {
     ipcRenderer.on('connections:state', handler)
     return () => ipcRenderer.removeListener('connections:state', handler)
   },
-  listUserConnections: () => ipcRenderer.invoke('userConnections:list'),
-  saveUserConnection: (id, input) => ipcRenderer.invoke('userConnections:save', id, input),
-  removeUserConnection: (id) => ipcRenderer.invoke('userConnections:remove', id),
+  listToolConnections: () => ipcRenderer.invoke('toolConnections:list'),
+  saveToolConnection: (id, input) => ipcRenderer.invoke('toolConnections:save', id, input),
+  removeToolConnection: (id) => ipcRenderer.invoke('toolConnections:remove', id),
+  listProviderConnections: () => ipcRenderer.invoke('providerConnections:list'),
+  saveProviderConnection: (id, input) => ipcRenderer.invoke('providerConnections:save', id, input),
+  removeProviderConnection: (id) => ipcRenderer.invoke('providerConnections:remove', id),
   resetApp: () => ipcRenderer.invoke('app:reset'),
   getAppInfo: () => ipcRenderer.invoke('app:info'),
   getUpdateState: () => ipcRenderer.invoke('update:state'),

@@ -1,13 +1,14 @@
 import { request as httpRequest, type ClientRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import { once } from 'node:events'
+import { randomUUID } from 'node:crypto'
 import { connect } from 'node:net'
 import WebSocket from 'ws'
 import type { Sessions } from './sessions'
 import { endpoint, type Connection } from '../shared/connections'
 import { connectionSession, connectionTLS } from './network'
 import { accessHeaders } from './access'
-import type { UserConnection } from '../shared/userConnections'
+import { StdioProcess, type StdioLaunch } from './process/stdio'
 
 const CHUNK = 64 * 1024
 // ~40 MB/s per stream at 100 ms round trip. Buffers fill only while a reader falls behind.
@@ -55,6 +56,7 @@ function decode(packet: Buffer): { header: Packet; data: Buffer } {
 
 export interface RelayDestination {
   url: string
+  exact?: boolean
   // Replaces the requested path, e.g. to add the destination's base path. Must stay on `url`'s origin.
   path?: string
   socketPath?: string
@@ -63,6 +65,7 @@ export interface RelayDestination {
 }
 
 type ResolveDestination = (path: string, websocket: boolean) => RelayDestination
+type LocalService = ResolveDestination | { stdio: () => StdioLaunch }
 
 interface Stream {
   service: string
@@ -75,6 +78,7 @@ interface Stream {
   closed: boolean
   request?: ClientRequest
   socket?: WebSocket
+  process?: StdioProcess
   chain: Promise<void>
   parts: Buffer[]
   size: number
@@ -88,7 +92,8 @@ export class Relay {
   private output = Promise.resolve()
   private pendingSends = 0
   private streams = new Map<string, Stream>()
-  private destinations = new Map<string, ResolveDestination>()
+  private destinations = new Map<string, LocalService>()
+  private revisions = new Map<string, string>()
   private stopped = false
   private retry?: ReturnType<typeof setTimeout>
   private heartbeat?: ReturnType<typeof setInterval>
@@ -106,16 +111,19 @@ export class Relay {
     private getName: () => string,
     private notify: (payload: unknown) => void = () => {},
     // The user's own connections, each also offered as a service of the same name.
-    private getConnections: () => (Pick<UserConnection, 'name' | 'type'> & {
+    private getConnections: () => {
       service: string
-    })[] = () => []
+      name: string
+      type: 'openai' | 'openapi' | 'terminal' | 'mcp'
+      transport?: 'stdio' | 'streamable-http'
+    }[] = () => []
   ) {}
 
   serviceNames(): string[] {
     return [...this.destinations.keys()]
   }
 
-  setService(name: string, resolve?: ResolveDestination): void {
+  setService(name: string, resolve?: LocalService): void {
     if (!/^[a-z][a-z0-9_]{0,31}$/.test(name)) throw new Error('Invalid service name')
     if (this.stopped) return
     if (resolve && !this.destinations.has(name) && this.destinations.size >= 16)
@@ -128,9 +136,22 @@ export class Relay {
         this.closeStream(id)
       }
     }
-    if (resolve) this.destinations.set(name, resolve)
-    else this.destinations.delete(name)
+    if (resolve) {
+      this.destinations.set(name, resolve)
+      this.revisions.set(name, randomUUID())
+    } else {
+      this.destinations.delete(name)
+      this.revisions.delete(name)
+    }
     this.updateName()
+  }
+
+  private advertisedConnections(): ReturnType<Relay['getConnections']> {
+    return this.getConnections()
+      .filter((item) => this.destinations.has(item.service))
+      .map((item) =>
+        item.type === 'mcp' ? { ...item, revision: this.revisions.get(item.service) } : item
+      )
   }
 
   updateName(): void {
@@ -138,8 +159,8 @@ export class Relay {
       this.socket.send(
         JSON.stringify({
           type: 'services',
-          services: [...this.destinations.keys()],
-          connections: this.getConnections(),
+          services: this.serviceNames(),
+          connections: this.advertisedConnections(),
           name: this.getName()
         })
       )
@@ -186,8 +207,8 @@ export class Relay {
             token: access.token,
             connection_id: this.connection.id,
             name: this.getName(),
-            services: [...this.destinations.keys()],
-            connections: this.getConnections()
+            services: this.serviceNames(),
+            connections: this.advertisedConnections()
           })
         )
       )
@@ -344,7 +365,7 @@ export class Relay {
 
   private receive(header: Packet, data: Buffer): void {
     let stream = this.streams.get(header.stream)
-    if (header.type === 'http-open' || header.type === 'ws-open') {
+    if (header.type === 'http-open' || header.type === 'ws-open' || header.type === 'stdio-open') {
       if (stream || header.sequence !== 0) throw new Error('Invalid stream')
       // A full device refuses this one operation; the other streams keep running.
       if (this.streams.size >= this.maxConcurrentStreams) {
@@ -395,10 +416,34 @@ export class Relay {
     current.chain = current.chain
       .then(async () => {
         if (current.closed) return
-        if (header.type === 'http-open' || header.type === 'ws-open')
+        if (header.type === 'stdio-open') await this.openStdio(header, current)
+        else if (header.type === 'http-open' || header.type === 'ws-open')
           await this.open(header, current)
         else if (header.type === 'data') {
-          if (current.request) {
+          if (current.process) {
+            const input = current.process.child.stdin
+            if (!input.write(data)) {
+              await new Promise<void>((resolve, reject) => {
+                const drain = (): void => {
+                  cleanup()
+                  resolve()
+                }
+                const closed = (): void => {
+                  cleanup()
+                  reject(new Error('MCP stdin closed'))
+                }
+                const cleanup = (): void => {
+                  input.off('drain', drain)
+                  input.off('close', closed)
+                  input.off('error', closed)
+                }
+                input.once('drain', drain)
+                input.once('close', closed)
+                input.once('error', closed)
+                if (input.destroyed) closed()
+              })
+            }
+          } else if (current.request) {
             if (!current.request.write(data)) await once(current.request, 'drain')
           } else if (current.socket) {
             current.parts.push(data)
@@ -448,8 +493,15 @@ export class Relay {
     )
       throw new Error('Invalid local path')
     const resolve = this.destinations.get(stream.service)
-    if (!resolve) throw new Error('Local service unavailable')
+    if (typeof resolve !== 'function') throw new Error('Local HTTP service unavailable')
     const destination = resolve(header.path, header.type === 'ws-open')
+    if (
+      destination.exact &&
+      (header.revision !== this.revisions.get(stream.service) ||
+        header.query ||
+        !['GET', 'POST', 'DELETE'].includes(String(header.method)))
+    )
+      throw new Error('Invalid MCP request')
     const base = new URL(destination.url)
     if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password)
       throw new Error('Invalid local destination')
@@ -477,6 +529,16 @@ export class Relay {
         { method, headers, socketPath: destination.socketPath, agent: false },
         (response) => {
           void (async () => {
+            // MCP redirects could escape the configured endpoint or expose its local URL.
+            if (
+              destination.exact &&
+              response.statusCode &&
+              response.statusCode >= 300 &&
+              response.statusCode < 400
+            ) {
+              response.destroy()
+              throw new Error('MCP redirects are not supported. Configure the final endpoint URL.')
+            }
             const responseHeaders = Object.fromEntries(
               Object.entries(response.headers).filter(
                 ([key]) => !/^(set-cookie|connection|transfer-encoding)$/i.test(key)
@@ -561,11 +623,45 @@ export class Relay {
     }
   }
 
+  private async openStdio(header: Packet, stream: Stream): Promise<void> {
+    const service = this.destinations.get(stream.service)
+    if (
+      !service ||
+      typeof service === 'function' ||
+      header.revision !== this.revisions.get(stream.service)
+    )
+      throw new Error('Local stdio service unavailable')
+    const process = new StdioProcess(service.stdio())
+    stream.process = process
+    await process.ready
+    if (stream.closed) return
+    await this.send(header.stream, 'stdio-ready')
+    void (async () => {
+      for await (const chunk of process.child.stdout) {
+        if (stream.closed) return
+        await this.chunks(header.stream, Buffer.from(chunk))
+      }
+      if (!stream.closed) await this.send(header.stream, 'end')
+    })()
+      .catch(async () => {
+        await this.send(header.stream, 'error', {
+          message: 'MCP process stopped; completion may be unknown.'
+        }).catch(() => {})
+      })
+      .finally(() => this.closeStream(header.stream))
+  }
+
   private closeStream(id: string): void {
     const stream = this.streams.get(id)
     if (!stream) return
     stream.closed = true
     stream.wake?.()
+    if (stream.process) {
+      const process = stream.process
+      void process.stop().catch(() => {
+        this.status('An MCP process could not be stopped. Restart Tether after stopping it.')
+      })
+    }
     stream.request?.destroy()
     stream.socket?.terminate()
     this.streams.delete(id)

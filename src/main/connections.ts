@@ -36,16 +36,26 @@ import { accessCookies, accessHeaders, isAccessLogin } from './access'
 import { OpenTerminal, openTerminalDestination, type TerminalHandle } from './terminal'
 import { Relay, type RelayDestination } from './relay'
 import { Store } from './store'
+import { mcpDestination } from './mcp'
+import { parseConnectionKey } from '../shared/connectionSettings'
+import {
+  parseToolConnection,
+  parseToolSecrets,
+  type ToolConnectionInfo,
+  type ToolConnectionInput,
+  type ToolConnection,
+  type ToolSecrets
+} from '../shared/toolConnections'
+import { stopStdioProcesses } from './process/stdio'
 import type { GeneralConfig, RuntimeState } from '../shared/config'
 import { attachContextMenu } from './contextMenu'
 import { validateEvent, type TetherEvent } from '../shared/events'
 import {
-  parseUserConnection,
-  parseUserConnectionKey,
-  type UserConnection,
-  type UserConnectionInfo,
-  type UserConnectionInput
-} from '../shared/userConnections'
+  parseProviderConnection,
+  type ProviderConnection,
+  type ProviderConnectionInfo,
+  type ProviderConnectionInput
+} from '../shared/providerConnections'
 
 interface LocalConnection {
   relay?: Relay
@@ -438,43 +448,79 @@ export class Connections {
       this.shellSender(event)
       return this.state()
     })
-    ipcMain.handle('userConnections:list', (event) => {
+    ipcMain.handle('providerConnections:list', (event) => {
       this.shellSender(event)
-      return this.userConnections()
+      return this.providerConnections()
     })
     ipcMain.handle(
-      'userConnections:save',
-      async (event, id: string | null, input: UserConnectionInput) => {
+      'providerConnections:save',
+      async (event, id: string | null, input: ProviderConnectionInput) => {
         this.shellSender(event)
         if (!input || typeof input !== 'object') throw new Error('Invalid connection')
-        if (id !== null && !this.store.userConnections.some((item) => item.id === id))
+        if (id !== null && !this.store.providerConnections.some((item) => item.id === id))
           throw new Error('Unknown connection')
-        const connection = parseUserConnection({
+        const connection = parseProviderConnection({
           id: id ?? randomUUID().replace(/-/g, '').slice(0, 24),
           name: input.name,
           type: input.type,
           url: input.url,
           enabled: input.enabled
         })
-        const key = input.key === undefined ? undefined : parseUserConnectionKey(input.key)
-        await this.saveUserConnections(
+        const key = input.key === undefined ? undefined : parseConnectionKey(input.key)
+        await this.saveProviderConnections(
           id === null
-            ? [...this.store.userConnections, connection]
-            : this.store.userConnections.map((item) => (item.id === id ? connection : item)),
+            ? [...this.store.providerConnections, connection]
+            : this.store.providerConnections.map((item) => (item.id === id ? connection : item)),
           key === undefined ? undefined : { id: connection.id, key }
         )
-        return this.userConnections()
+        return this.providerConnections()
       }
     )
-    ipcMain.handle('userConnections:remove', async (event, id: string) => {
+    ipcMain.handle('providerConnections:remove', async (event, id: string) => {
       this.shellSender(event)
-      if (!this.store.userConnections.some((item) => item.id === id))
+      if (!this.store.providerConnections.some((item) => item.id === id))
         throw new Error('Unknown connection')
-      await this.saveUserConnections(
-        this.store.userConnections.filter((item) => item.id !== id),
+      await this.saveProviderConnections(
+        this.store.providerConnections.filter((item) => item.id !== id),
         { id, key: '' }
       )
-      return this.userConnections()
+      return this.providerConnections()
+    })
+    ipcMain.handle('toolConnections:list', (event) => {
+      this.shellSender(event)
+      return this.toolConnections()
+    })
+    ipcMain.handle(
+      'toolConnections:save',
+      async (event, id: string | null, input: ToolConnectionInput) => {
+        this.shellSender(event)
+        if (!input || typeof input !== 'object') throw new Error('Invalid tool connection')
+        if (id !== null && !this.store.toolConnections.some((server) => server.id === id))
+          throw new Error('Unknown tool connection')
+        const server = parseToolConnection({
+          ...input,
+          id: id ?? randomUUID().replace(/-/g, '').slice(0, 24)
+        })
+        const secrets = parseToolSecrets(input, this.store.toolSecrets[server.id])
+        await this.saveToolConnections(
+          id === null
+            ? [...this.store.toolConnections, server]
+            : this.store.toolConnections.map((item) => (item.id === id ? server : item)),
+          server.id,
+          secrets
+        )
+        return this.toolConnections()
+      }
+    )
+    ipcMain.handle('toolConnections:remove', async (event, id: string) => {
+      this.shellSender(event)
+      if (!this.store.toolConnections.some((server) => server.id === id))
+        throw new Error('Unknown tool connection')
+      await this.saveToolConnections(
+        this.store.toolConnections.filter((server) => server.id !== id),
+        id
+      )
+      return this.toolConnections()
     })
     ipcMain.handle(
       'connections:add',
@@ -1076,22 +1122,26 @@ export class Connections {
     notification.show()
   }
 
-  private userConnections(): UserConnectionInfo[] {
-    return this.store.userConnections.map((item) => ({
+  private providerConnections(): ProviderConnectionInfo[] {
+    return this.store.providerConnections.map((item) => ({
       ...item,
       hasKey: !!this.store.connectionKeys[item.id]
     }))
   }
 
-  private async saveUserConnections(
-    connections: UserConnection[],
+  private async saveProviderConnections(
+    connections: ProviderConnection[],
     change?: { id: string; key: string }
   ): Promise<void> {
-    if (connections.filter((item) => item.enabled).length > 15)
+    if (
+      connections.filter((item) => item.enabled).length +
+        this.store.toolConnections.filter((server) => server.enabled).length >
+      15
+    )
       throw new Error('Turn off a connection first. At most 15 can be on at once.')
-    const previous = this.store.userConnections
+    const previous = this.store.providerConnections
     const previousKeys = this.store.connectionKeys
-    this.store.userConnections = connections
+    this.store.providerConnections = connections
     if (change) {
       const keys = { ...previousKeys }
       if (change.key) keys[change.id] = change.key
@@ -1102,55 +1152,109 @@ export class Connections {
       await this.store.saveConfig()
       if (change) await this.store.saveConnectionKeys()
     } catch (error) {
-      this.store.userConnections = previous
+      this.store.providerConnections = previous
       this.store.connectionKeys = previousKeys
       throw error
     }
-    for (const entry of this.local.values()) this.applyUserConnections(entry)
+    for (const entry of this.local.values()) this.applyServices(entry)
   }
 
   // At most 15: a relay allows 16 services and the built-in terminal takes one.
-  private enabledUserConnections(): UserConnection[] {
-    return this.store.userConnections.filter((item) => item.enabled).slice(0, 15)
+  private enabledProviderConnections(): ProviderConnection[] {
+    return this.store.providerConnections.filter((item) => item.enabled).slice(0, 15)
   }
 
-  // One relay service per enabled connection, like the built-in terminal. setService closes a
-  // service's open streams, so it runs only when a connection is added, removed or toggled.
-  private applyUserConnections(entry: LocalConnection): void {
+  private toolConnections(): ToolConnectionInfo[] {
+    return this.store.toolConnections.map((server) => ({
+      ...server,
+      hasKey: !!this.store.toolSecrets[server.id]?.key,
+      hasEnvironment: !!Object.keys(this.store.toolSecrets[server.id]?.env ?? {}).length
+    }))
+  }
+
+  private async saveToolConnections(
+    servers: ToolConnection[],
+    id: string,
+    secrets?: ToolSecrets
+  ): Promise<void> {
+    if (
+      servers.filter((server) => server.enabled).length + this.enabledProviderConnections().length >
+      15
+    )
+      throw new Error('Turn off a connection first. At most 15 can be on at once.')
+    const previous = this.store.toolConnections
+    const previousSecrets = this.store.toolSecrets
+    this.store.toolConnections = servers
+    this.store.toolSecrets = { ...previousSecrets }
+    if (secrets) this.store.toolSecrets[id] = secrets
+    else delete this.store.toolSecrets[id]
+    try {
+      await this.store.saveConfig()
+      await this.store.saveToolSecrets()
+    } catch (error) {
+      this.store.toolConnections = previous
+      this.store.toolSecrets = previousSecrets
+      throw error
+    }
+    for (const entry of this.local.values()) {
+      // MCP sessions cannot survive edits to their command, endpoint or credentials.
+      if (
+        previous.find((server) => server.id === id)?.type === 'mcp' ||
+        servers.find((server) => server.id === id)?.type === 'mcp'
+      )
+        entry.relay?.setService('c_' + id)
+      this.applyServices(entry)
+    }
+  }
+
+  private applyServices(entry: LocalConnection): void {
     const relay = entry.relay
     if (!relay) return
-    const wanted = new Set(this.enabledUserConnections().map((item) => 'c_' + item.id))
-    let changed = false
+    const connections = [
+      ...this.enabledProviderConnections(),
+      ...this.store.toolConnections.filter((tool) => tool.enabled)
+    ]
+    const wanted = new Set(connections.map((connection) => 'c_' + connection.id))
     for (const name of relay.serviceNames()) {
-      if (name.startsWith('c_') && !wanted.has(name)) {
-        relay.setService(name)
-        changed = true
-      }
+      if (name.startsWith('c_') && !wanted.has(name)) relay.setService(name)
     }
-    for (const name of wanted) {
-      if (!relay.serviceNames().includes(name)) {
-        const id = name.slice(2)
+    for (const connection of connections) {
+      const name = 'c_' + connection.id
+      if (relay.serviceNames().includes(name)) continue
+      if (connection.type === 'mcp' && connection.transport === 'stdio') {
+        relay.setService(name, {
+          stdio: () => ({
+            command: connection.command,
+            args: connection.args,
+            cwd: connection.cwd,
+            env: this.store.toolSecrets[connection.id]?.env ?? {}
+          })
+        })
+      } else {
         relay.setService(name, (path, websocket) =>
-          this.userConnectionDestination(id, path, websocket)
+          this.serviceDestination(connection.id, path, websocket)
         )
-        changed = true
       }
     }
-    // Renames and URL or type edits only change the announced list.
-    if (!changed) relay.updateName()
+    relay.updateName()
   }
 
-  // Reads the URL and key on each request, so edits apply without interrupting open streams.
-  private userConnectionDestination(
-    id: string,
-    path: string,
-    websocket: boolean
-  ): RelayDestination {
-    const connection = this.enabledUserConnections().find((item) => item.id === id)
+  // Read URL-based settings on each request so ordinary edits leave open streams alone.
+  private serviceDestination(id: string, path: string, websocket: boolean): RelayDestination {
+    const connection = [...this.store.providerConnections, ...this.store.toolConnections].find(
+      (item) => item.id === id && item.enabled
+    )
     if (!connection) throw new Error('Unknown connection')
+    const key =
+      connection.type === 'openai'
+        ? (this.store.connectionKeys[id] ?? '')
+        : (this.store.toolSecrets[id]?.key ?? '')
+    if (connection.type === 'mcp') {
+      if (connection.transport !== 'streamable-http') throw new Error('Invalid MCP transport')
+      return mcpDestination(connection.url, key, path, websocket)
+    }
     const base = new URL(connection.url)
     const target = base.pathname.replace(/\/+$/, '') + path
-    const key = this.store.connectionKeys[connection.id] ?? ''
     if (connection.type === 'terminal')
       return { ...openTerminalDestination(base.origin, key, target, websocket), path: target }
     return {
@@ -1202,14 +1306,23 @@ export class Connections {
         },
         () => this.store.effectiveDeviceName,
         (payload) => this.showNotification(id, payload),
-        () =>
-          this.enabledUserConnections().map(({ id, name, type }) => ({
+        () => [
+          ...this.enabledProviderConnections().map(({ id, name, type }) => ({
             service: 'c_' + id,
             name,
             type
-          }))
+          })),
+          ...this.store.toolConnections
+            .filter((server) => server.enabled)
+            .map((server) => ({
+              service: 'c_' + server.id,
+              name: server.name,
+              type: server.type,
+              ...(server.type === 'mcp' ? { transport: server.transport } : {})
+            }))
+        ]
       )
-      this.applyUserConnections(entry)
+      this.applyServices(entry)
       await entry.relay.connect()
       void this.startTerminal(id, entry)
     } catch (error) {
@@ -1327,6 +1440,6 @@ export class Connections {
       clearTimeout(local.retry)
       local.relay?.stop()
     }
-    await Promise.all([this.terminal.stop(), this.localShell.shutdown()])
+    await Promise.all([this.terminal.stop(), this.localShell.shutdown(), stopStdioProcesses()])
   }
 }

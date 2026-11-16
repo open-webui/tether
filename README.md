@@ -25,6 +25,11 @@ On macOS and supported Windows devices, restrict Open Terminal to a local folder
 in **Settings → Open Terminal → Sandbox**. Workspace sandboxing is unavailable on Linux.
 See the [sandbox guide](docs/sandbox.md) for platform support, behavior, and limitations.
 
+### MCP servers
+
+Connect local stdio commands or Streamable HTTP MCP servers in **Settings → Integrations**.
+See the [MCP guide](docs/mcp.md) for setup and examples.
+
 ### Contributing
 
 We don't take pull requests. [Open an issue](https://github.com/open-webui/tether/issues) describing the bug or idea.

@@ -1,28 +1,13 @@
-// Connections Tether makes on Open WebUI's behalf. Their keys never leave this computer.
-export const userConnectionTypes = ['openai', 'openapi', 'terminal'] as const
-
-export type UserConnectionType = (typeof userConnectionTypes)[number]
-
-export interface UserConnection {
+export interface ConnectionSettings {
   id: string
   name: string
-  type: UserConnectionType
-  url: string
   enabled: boolean
 }
 
-export interface UserConnectionInfo extends UserConnection {
-  hasKey: boolean
-}
-
-// `key` left out keeps the saved key; an empty string removes it.
-export type UserConnectionInput = Omit<UserConnection, 'id'> & { key?: string }
-
-export function parseUserConnection(value: unknown): UserConnection {
+export function parseConnectionSettings(value: unknown): ConnectionSettings {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Invalid connection')
-  const { id, name, type, url, enabled } = value as Record<string, unknown>
-  // Forms the relay service name `c_<id>`.
+  const { id, name, enabled } = value as Record<string, unknown>
   if (typeof id !== 'string' || !/^[a-z0-9]{1,24}$/.test(id))
     throw new Error('Invalid connection id')
   if (
@@ -32,19 +17,11 @@ export function parseUserConnection(value: unknown): UserConnection {
     Array.from(name).some((character) => character.charCodeAt(0) < 32)
   )
     throw new Error('Enter a connection name of at most 100 characters.')
-  if (!userConnectionTypes.includes(type as UserConnectionType))
-    throw new Error('Invalid connection type')
   if (typeof enabled !== 'boolean') throw new Error('Invalid connection setting')
-  return {
-    id,
-    name: name.trim(),
-    type: type as UserConnectionType,
-    url: normalizeUserConnectionURL(url),
-    enabled
-  }
+  return { id, name: name.trim(), enabled }
 }
 
-export function normalizeUserConnectionURL(value: unknown): string {
+export function normalizeServiceURL(value: unknown, exact = false): string {
   let url: URL
   try {
     url = new URL(String(value).trim())
@@ -54,10 +31,10 @@ export function normalizeUserConnectionURL(value: unknown): string {
   if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
     throw new Error('Enter an HTTP or HTTPS URL without embedded credentials.')
   if (url.search || url.hash) throw new Error('Use the URL without a query or fragment.')
-  return url.href.replace(/\/+$/, '')
+  return exact ? url.href : url.href.replace(/\/+$/, '')
 }
 
-export function parseUserConnectionKey(value: unknown): string {
+export function parseConnectionKey(value: unknown): string {
   if (
     typeof value !== 'string' ||
     value.length > 8192 ||
