@@ -63,10 +63,14 @@
   let sandboxEnabled = $state(false)
   let workspacePath = $state('')
   let networkAccess = $state(false)
-  let sandboxSaving = $state(false)
-  const sandboxDirty = $derived(
-    sandboxConfigChanged(savedSandbox, { enabled: sandboxEnabled, workspacePath, networkAccess })
-  )
+  let sandboxError = $state('')
+  const pendingSandbox = $derived({
+    enabled: sandboxEnabled,
+    workspacePath: workspacePath.trim(),
+    networkAccess
+  })
+  const sandboxDirty = $derived(sandboxConfigChanged(savedSandbox, pendingSandbox))
+  const missingWorkspace = $derived(sandboxEnabled && !pendingSandbox.workspacePath)
   const sandboxRestrictsAccess = $derived(
     platform === 'darwin' &&
       sandboxEnabled &&
@@ -74,6 +78,12 @@
         workspacePath.trim() !== savedSandbox.workspacePath ||
         (savedSandbox.networkAccess && !networkAccess))
   )
+  const restartTooltip = $derived({
+    content: $i18n.t('settings.sandbox.existingProcesses'),
+    onShow: () => {
+      if (!sandboxRestrictsAccess) return false
+    }
+  })
   let runtime = $state<RuntimeState>({ version: null, status: '', busy: false, error: '' })
   let loaded = $state(false)
   let installing = $state(false)
@@ -81,13 +91,7 @@
   let error = $state('')
   let saving: Promise<void> = Promise.resolve()
   const busy = $derived(
-    runtime.busy ||
-      installing ||
-      uninstalling ||
-      restarting ||
-      transportSaving ||
-      sandboxSaving ||
-      !loaded
+    runtime.busy || installing || uninstalling || restarting || transportSaving || !loaded
   )
   const capabilities = $derived([
     {
@@ -150,19 +154,27 @@
   }
 
   async function chooseWorkspace(): Promise<void> {
+    sandboxError = ''
     try {
       const directory = await window.api.selectDirectory()
       if (directory !== null) workspacePath = directory
     } catch (cause) {
-      error = String(cause)
+      sandboxError = String(cause).replace(/^Error: /, '')
     }
   }
 
-  async function applySandbox(): Promise<void> {
-    sandboxSaving = true
+  async function restart(): Promise<void> {
+    const applySandbox = sandboxDirty
+    restarting = true
     error = ''
+    sandboxError = ''
     try {
-      await save({ enabled: sandboxEnabled, workspacePath, networkAccess })
+      await save(pendingSandbox)
+      if (!applySandbox) {
+        await window.api.restartTerminal()
+        return
+      }
+      // Saving a changed sandbox already restarts the terminal in the main process.
       const config = await window.api.getConfig()
       savedSandbox = config.localServer.sandbox
       sandboxEnabled = savedSandbox.enabled
@@ -170,9 +182,11 @@
       networkAccess = savedSandbox.networkAccess
       runtime = await window.api.getRuntimeState()
     } catch (cause) {
-      error = String(cause).replace(/^Error: /, '')
+      const message = String(cause).replace(/^Error: /, '')
+      if (applySandbox || savedSandbox.enabled) sandboxError = message
+      else error = message
     } finally {
-      sandboxSaving = false
+      restarting = false
     }
   }
 
@@ -221,19 +235,6 @@
       }
     } catch (cause) {
       error = String(cause).replace(/^Error: /, '')
-    }
-  }
-
-  async function restart(): Promise<void> {
-    restarting = true
-    error = ''
-    try {
-      await save()
-      await window.api.restartTerminal()
-    } catch (cause) {
-      error = String(cause).replace(/^Error: /, '')
-    } finally {
-      restarting = false
     }
   }
 
@@ -405,9 +406,18 @@
         disabled={busy || (!savedSandbox.enabled && runtime.sandbox?.support.supported === false)}
         onchange={(value) => {
           sandboxEnabled = value
+          sandboxError = ''
         }}
       />
     </div>
+    {#if sandboxError || (savedSandbox.enabled && runtime.sandbox?.error)}
+      <p
+        class="mt-2 text-[11px] leading-[16px] text-red-600 dark:text-red-400 whitespace-pre-wrap break-words select-text"
+        role="alert"
+      >
+        {sandboxError || runtime.sandbox?.error}
+      </p>
+    {/if}
     {#if sandboxEnabled || savedSandbox.enabled}
       <label class="setting-label" for="sandbox-workspace"
         >{$i18n.t('settings.sandbox.workspace')}</label
@@ -458,25 +468,14 @@
               ? $i18n.t('settings.sandbox.starting')
               : $i18n.t('settings.sandbox.inactive')}
       </p>
-      {#if runtime.sandbox?.error}<p
-          class="setting-description mt-2 whitespace-pre-wrap break-words select-text"
-          role="alert"
-        >
-          {runtime.sandbox.error}
-        </p>{/if}
     {/if}
     {#if sandboxDirty}
       <p class="setting-description mt-2">{$i18n.t('settings.sandbox.restartNotice')}</p>
       <button
         class="env-action mt-2"
-        disabled={busy || (sandboxEnabled && !workspacePath.trim())}
-        use:tooltip={{
-          content: $i18n.t('settings.sandbox.existingProcesses'),
-          onShow: () => {
-            if (!sandboxRestrictsAccess) return false
-          }
-        }}
-        onclick={applySandbox}
+        disabled={busy || missingWorkspace}
+        use:tooltip={restartTooltip}
+        onclick={restart}
       >
         {$i18n.t('settings.sandbox.apply')}
       </button>
@@ -806,7 +805,8 @@
     </p>
     <button
       class="env-action shrink-0"
-      disabled={busy || !runtime.version || !enabled}
+      disabled={busy || missingWorkspace || !runtime.version || !enabled}
+      use:tooltip={restartTooltip}
       onclick={restart}
       >{restarting
         ? $i18n.t('common.restarting')
